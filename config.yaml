@@ -1,0 +1,50 @@
+# 콘텐츠 파이프라인 설정
+# 비밀값(API 키)은 여기 두지 말 것. .env 사용.
+
+# 생성 언어: ko | en
+language: ko
+
+# 초기 니치 — 주제 필터링/글쓰기 프롬프트에 주입된다.
+niche: "알고리즘 트레이딩, 퀀트 투자, 파이썬 자동매매"
+
+collect:
+  # 한 번 수집할 때 최종 선정할 주제 수
+  top_n: 5
+  sources:
+    google_trends:
+      enabled: true
+      # pytrends 시드 키워드
+      seed_keywords:
+        - "algorithmic trading"
+        - "quant investing"
+        - "python trading bot"
+      geo: ""        # "" = 글로벌, "KR" = 한국
+      timeframe: "now 7-d"
+    reddit:
+      enabled: false  # praw 자격증명 설정 후 true
+      subreddits:
+        - algotrading
+        - quant
+      limit: 25
+
+generate:
+  # claude CLI 실행 파일. PATH에 없으면 절대경로로 지정.
+  # 예: /Users/chury99/.claude/local/claude
+  claude_bin: "claude"
+  # claude -p 호출 타임아웃(초)
+  timeout: 300
+  # 초안 목표 분량
+  target_words: 1500
+
+publish:
+  # 발행 어댑터: ghost | dryrun
+  adapter: ghost
+  ghost:
+    # 예: https://your-site.ghost.io
+    api_url: "https://CHANGE-ME.ghost.io"
+    api_version: "v5.0"
+
+paths:
+  drafts: "drafts"
+  prompts: "prompts"
+  topics: "drafts/_topics.json"
