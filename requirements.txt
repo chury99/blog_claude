@@ -3,6 +3,7 @@ python-frontmatter>=1.1
 python-dotenv>=1.0
 requests>=2.32
 PyJWT>=2.8
+markdown>=3.6
 
 # 1단계(수집) 사용 시
 pytrends>=4.9

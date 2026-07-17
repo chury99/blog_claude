@@ -38,10 +38,14 @@ def build_prompt(cfg: dict[str, Any], topic: dict[str, Any]) -> str:
     )
 
 
+def draft_path(cfg: dict[str, Any], topic: dict[str, Any]) -> Path:
+    slug = topic.get("slug") or slugify(topic["title"])
+    return drafts_dir(cfg) / f"{date.today():%Y%m%d}-{slug}.md"
+
+
 def write_draft(cfg: dict[str, Any], topic: dict[str, Any], body: str) -> Path:
     slug = topic.get("slug") or slugify(topic["title"])
-    filename = f"{date.today():%Y%m%d}-{slug}.md"
-    path = drafts_dir(cfg) / filename
+    path = draft_path(cfg, topic)
 
     post = frontmatter.Post(
         body,
@@ -59,6 +63,14 @@ def write_draft(cfg: dict[str, Any], topic: dict[str, Any], body: str) -> Path:
 
 
 def generate_one(cfg: dict[str, Any], topic: dict[str, Any]) -> Path:
+    # 이미 초안이 있으면 절대 덮어쓰지 않는다 — 검수 중 채워 넣은
+    # 사람 편집분이 날아간다. claude 호출 전에 검사해 생성 비용도 아낀다.
+    path = draft_path(cfg, topic)
+    if path.exists():
+        raise PipelineError(
+            f"초안이 이미 존재합니다: {path.name}\n"
+            "  다시 생성하려면 해당 파일을 먼저 삭제하거나 이름을 바꾸세요."
+        )
     prompt = build_prompt(cfg, topic)
     body = claude_cli.ask(cfg, prompt)
     return write_draft(cfg, topic, body)

@@ -22,6 +22,9 @@ from .common import PipelineError, drafts_dir
 class Publisher(ABC):
     """발행 대상 플랫폼 어댑터. Ghost 외 플랫폼은 이걸 상속해 추가."""
 
+    # 실제 업로드가 일어나는 어댑터만 True. 초안에 published_url 을 기록할지 결정.
+    uploads = True
+
     @abstractmethod
     def push(self, post: frontmatter.Post, live: bool) -> str:
         """초안을 업로드하고 결과 URL(또는 식별자)을 돌려준다."""
@@ -29,6 +32,8 @@ class Publisher(ABC):
 
 class DryRunPublisher(Publisher):
     """실제 업로드 없이 무엇이 올라갈지만 보여준다."""
+
+    uploads = False
 
     def push(self, post: frontmatter.Post, live: bool) -> str:
         status = "published" if live else "draft"
@@ -101,15 +106,18 @@ class GhostPublisher(Publisher):
 
 
 def _markdown_to_html(md: str) -> str:
-    """Ghost 는 source=html 로 HTML 을 받는다.
+    """Ghost 는 source=html 로 HTML 을 받으므로 변환이 필수다.
 
-    markdown 패키지가 있으면 변환하고, 없으면 Ghost 가 그대로 렌더하도록
-    <pre> 로 감싸지 않고 원문을 넘긴다(검수 단계에서 확인 가능).
+    원시 마크다운을 그대로 보내면 글이 깨진 채 올라가므로,
+    변환기가 없으면 조용히 넘기지 않고 에러를 낸다.
     """
     try:
         import markdown
-    except ImportError:
-        return md
+    except ImportError as e:
+        raise PipelineError(
+            "markdown 패키지가 필요합니다: pip install markdown\n"
+            "  (requirements.txt 에 포함되어 있습니다)"
+        ) from e
     return markdown.markdown(md, extensions=["fenced_code", "tables"])
 
 
@@ -124,8 +132,8 @@ def make_publisher(cfg: dict[str, Any]) -> Publisher:
 
 def find_draft(cfg: dict[str, Any], name: str) -> Path:
     d = drafts_dir(cfg)
-    path = d / name if not name.endswith(".md") else d / name
-    if not path.exists():
+    path = d / name
+    if not path.exists() and not name.endswith(".md"):
         path = d / f"{name}.md"
     if not path.exists():
         available = sorted(p.name for p in d.glob("*.md"))
@@ -160,7 +168,10 @@ def run(cfg: dict[str, Any], draft_name: str, live: bool = False) -> str:
 
     url = publisher.push(post, live=live)
 
-    post["published_url"] = url
-    path.write_text(frontmatter.dumps(post), encoding="utf-8")
+    # dryrun 은 실제로 올라간 게 아니므로 발행 기록을 남기지 않는다
+    # (남기면 이후 진짜 발행이 중복으로 거부됨)
+    if publisher.uploads:
+        post["published_url"] = url
+        path.write_text(frontmatter.dumps(post), encoding="utf-8")
     print(f"[publish] 완료: {url}")
     return url
