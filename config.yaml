@@ -13,13 +13,11 @@ collect:
   sources:
     google_trends:
       enabled: true
-      # pytrends 시드 키워드
-      seed_keywords:
-        - "algorithmic trading"
-        - "quant investing"
-        - "python trading bot"
-      geo: ""        # "" = 글로벌, "KR" = 한국
-      timeframe: "now 7-d"
+      # 국가별 실시간 인기 검색어 RSS (trends.google.com/trending/rss?geo=..).
+      # 시드 키워드 없이 그 나라 전체의 관심사를 그대로 가져온다.
+      geos:
+        - KR
+        - US
     reddit:
       enabled: false  # praw 자격증명 설정 후 true
       subreddits:

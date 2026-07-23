@@ -1,6 +1,6 @@
 """1단계: 주제 수집(Google Trends / Reddit) → Claude 필터 → 상위 N개 선정.
 
-수집 소스는 config.yaml 에서 켜고 끈다. 소스 라이브러리가 없거나 실패해도
+수집 소스는 config.yaml 에서 켜고 끈다. 소스가 실패해도
 파이프라인 전체를 죽이지 않고 해당 소스만 건너뛴다.
 """
 
@@ -8,37 +8,38 @@ from __future__ import annotations
 
 import json
 import os
+import xml.etree.ElementTree as ET
 from typing import Any
+
+import requests
 
 from . import claude_cli
 from .common import PipelineError, extract_json, load_prompt, slugify, topics_path
 
+_TRENDS_RSS_URL = "https://trends.google.com/trending/rss"
+
 
 def collect_google_trends(cfg: dict[str, Any]) -> list[str]:
+    """국가별 실시간 인기 검색어 RSS 피드. 시드 키워드 없이 그 나라 전체의
+    관심사를 그대로 가져온다(related_queries 처럼 특정 주제 근방으로 한정하지 않음).
+    """
     conf = cfg["collect"]["sources"]["google_trends"]
-    try:
-        from pytrends.request import TrendReq
-    except ImportError:
-        print("[collect] pytrends 미설치 — Google Trends 건너뜀")
-        return []
-
     candidates: list[str] = []
-    try:
-        pytrends = TrendReq(hl="en-US", tz=540)
-        for seed in conf["seed_keywords"]:
-            pytrends.build_payload(
-                [seed], timeframe=conf["timeframe"], geo=conf["geo"]
-            )
-            related = pytrends.related_queries().get(seed, {})
-            for key in ("rising", "top"):
-                df = related.get(key)
-                if df is not None and not df.empty:
-                    candidates.extend(df["query"].astype(str).tolist())
-    except Exception as e:  # pytrends 는 구글 응답 변경에 자주 깨진다
-        print(f"[collect] Google Trends 실패 — 건너뜀: {e}")
-        return []
+    for geo in conf["geos"]:
+        try:
+            resp = requests.get(_TRENDS_RSS_URL, params={"geo": geo}, timeout=15)
+            resp.raise_for_status()
+            root = ET.fromstring(resp.text)
+            titles = [
+                title.strip()
+                for item in root.iter("item")
+                if (title := item.findtext("title")) and title.strip()
+            ]
+            candidates.extend(titles)
+            print(f"[collect] Google Trends RSS({geo}): 후보 {len(titles)}개")
+        except Exception as e:
+            print(f"[collect] Google Trends RSS({geo}) 실패 — 건너뜀: {e}")
 
-    print(f"[collect] Google Trends: 후보 {len(candidates)}개")
     return candidates
 
 
