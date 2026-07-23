@@ -26,9 +26,8 @@ collect:
       limit: 25
 
 generate:
-  # claude CLI 실행 파일. PATH에 없으면 절대경로로 지정.
-  # 예: /Users/chury99/.claude/local/claude
-  claude_bin: "claude"
+  # claude CLI 실행 파일. cron/launchd 는 PATH 가 최소한이라 절대경로로 둔다.
+  claude_bin: "/Users/chury99/.local/bin/claude"
   # claude -p 호출 타임아웃(초)
   timeout: 300
   # 초안 목표 분량

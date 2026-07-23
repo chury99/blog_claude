@@ -42,9 +42,15 @@ def ask(cfg: dict[str, Any], prompt: str) -> str:
         raise PipelineError(f"claude 호출이 {timeout}초 안에 끝나지 않았습니다.") from e
 
     if proc.returncode != 0:
-        raise PipelineError(
-            f"claude 호출 실패 (exit {proc.returncode}):\n{proc.stderr.strip()}"
-        )
+        # 미로그인 등 일부 오류는 stderr 가 아니라 stdout 으로 나온다.
+        # stderr 만 보면 원인이 안 보이는 빈 에러가 뜬다.
+        detail = proc.stderr.strip() or proc.stdout.strip() or "(출력 없음)"
+        if "login" in detail.lower():
+            detail += (
+                "\n  → 터미널에서 `claude` 를 실행하고 /login 으로 로그인하세요.\n"
+                "     (파이프라인은 로그인된 CLI 세션을 그대로 빌려 씁니다)"
+            )
+        raise PipelineError(f"claude 호출 실패 (exit {proc.returncode}):\n{detail}")
 
     out = proc.stdout.strip()
     if not out:
