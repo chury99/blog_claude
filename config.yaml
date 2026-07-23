@@ -42,6 +42,16 @@ publish:
     api_url: "https://CHANGE-ME.ghost.io"
     api_version: "v5.0"
 
+notify:
+  telegram:
+    # 토큰/채팅ID 는 config/telegram.json (git 제외). 아래로 경로 변경 가능:
+    # config_path: "config/telegram.json"
+    enabled: true
+    # 초안 생성이 끝나 검수가 필요할 때 알림
+    on_drafts_ready: true
+    # 발행 완료 통보 (승인이 아니라 사후 통보)
+    on_published: true
+
 paths:
   drafts: "drafts"
   prompts: "prompts"

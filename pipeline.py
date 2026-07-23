@@ -20,7 +20,7 @@ import sys
 import frontmatter
 from dotenv import load_dotenv
 
-from steps import collect, generate, publish
+from steps import collect, generate, notify, publish
 from steps.common import PipelineError, drafts_dir, load_config
 
 
@@ -38,6 +38,10 @@ def cmd_generate(args, cfg) -> int:
     print(f"\n초안 {len(written)}개 생성. 파이프라인은 여기서 멈춥니다.")
     print("초안을 읽고 실전 데이터를 채운 뒤 프론트매터의 reviewed 를 true 로 바꾸세요.")
     print("다음: python pipeline.py review")
+
+    if cfg.get("notify", {}).get("telegram", {}).get("on_drafts_ready"):
+        files = "\n".join(f"• {p.name}" for p in written)
+        notify.send(cfg, f"📝 <b>초안 {len(written)}개 검수 대기</b>\n{files}")
     return 0
 
 
@@ -69,7 +73,19 @@ def cmd_publish(args, cfg) -> int:
         if answer.strip().lower() != "y":
             print("취소했습니다.")
             return 1
-    publish.run(cfg, args.draft, live=args.live)
+    url = publish.run(cfg, args.draft, live=args.live)
+
+    if cfg.get("notify", {}).get("telegram", {}).get("on_published"):
+        status = "공개 발행" if args.live else "플랫폼 draft"
+        notify.send(cfg, f"🚀 <b>{status}</b>\n{args.draft}\n{url}")
+    return 0
+
+
+def cmd_telegram(args, cfg) -> int:
+    if args.action == "setup":
+        notify.setup(cfg, token=args.token, chat_id=args.chat_id)
+    else:
+        notify.check(cfg)
     return 0
 
 
@@ -102,6 +118,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="플랫폼 draft 가 아니라 실제 공개 발행. 확인 프롬프트가 뜬다.",
     )
     p_publish.set_defaults(func=cmd_publish)
+
+    p_tg = sub.add_parser("telegram", help="텔레그램 알림 설정/점검")
+    p_tg.add_argument(
+        "action",
+        choices=["setup", "test"],
+        help="setup: 토큰 저장 + chat_id 자동 탐지 / test: 저장된 설정으로 발송 확인",
+    )
+    p_tg.add_argument("--token", help="BotFather 토큰 (생략 시 설정 파일에서 읽음)")
+    p_tg.add_argument("--chat-id", help="chat_id 직접 지정 (자동 탐지 건너뜀)")
+    p_tg.set_defaults(func=cmd_telegram)
 
     return parser
 
