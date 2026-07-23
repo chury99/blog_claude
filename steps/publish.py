@@ -1,9 +1,9 @@
-"""4단계: 발행 어댑터.
+"""6단계: 발행 어댑터.
 
-안전장치가 3중으로 걸려 있다 (CONTEXT.md 3-4 참고 — 완전 무인 발행 금지):
-  1. pipeline.py 에서 `publish` 서브커맨드를 명시적으로 부를 때만 이 단계가 돈다.
-  2. 초안 프론트매터의 reviewed 가 true 여야 한다. 사람이 직접 바꿔야 한다.
-  3. 그래도 기본은 Ghost draft 상태로 올라간다. 실제 공개는 --live 를 추가로 줘야 한다.
+자동 발행 전제(CONTEXT.md 3-2). 안전장치는 발행 승인이 아니라:
+  - config.yaml 의 publish.auto 킬스위치 (daily 가 이 단계를 부를지 결정)
+  - 이미 발행된 글(published_url 기록)은 중복 업로드 거부
+  - dryrun 어댑터로 무발행 테스트
 """
 
 from __future__ import annotations
@@ -16,18 +16,18 @@ from typing import Any
 
 import frontmatter
 
-from .common import PipelineError, drafts_dir
+from .common import PipelineError, posts_dir
 
 
 class Publisher(ABC):
     """발행 대상 플랫폼 어댑터. Ghost 외 플랫폼은 이걸 상속해 추가."""
 
-    # 실제 업로드가 일어나는 어댑터만 True. 초안에 published_url 을 기록할지 결정.
+    # 실제 업로드가 일어나는 어댑터만 True. 글 파일에 published_url 을 기록할지 결정.
     uploads = True
 
     @abstractmethod
     def push(self, post: frontmatter.Post, live: bool) -> str:
-        """초안을 업로드하고 결과 URL(또는 식별자)을 돌려준다."""
+        """글을 업로드하고 결과 URL(또는 식별자)을 돌려준다."""
 
 
 class DryRunPublisher(Publisher):
@@ -106,11 +106,7 @@ class GhostPublisher(Publisher):
 
 
 def _markdown_to_html(md: str) -> str:
-    """Ghost 는 source=html 로 HTML 을 받으므로 변환이 필수다.
-
-    원시 마크다운을 그대로 보내면 글이 깨진 채 올라가므로,
-    변환기가 없으면 조용히 넘기지 않고 에러를 낸다.
-    """
+    """Ghost 는 source=html 로 HTML 을 받으므로 변환이 필수다."""
     try:
         import markdown
     except ImportError as e:
@@ -130,31 +126,23 @@ def make_publisher(cfg: dict[str, Any]) -> Publisher:
     raise PipelineError(f"알 수 없는 발행 어댑터: {adapter!r} (ghost | dryrun)")
 
 
-def find_draft(cfg: dict[str, Any], name: str) -> Path:
-    d = drafts_dir(cfg)
+def find_post(cfg: dict[str, Any], name: str) -> Path:
+    d = posts_dir(cfg)
     path = d / name
     if not path.exists() and not name.endswith(".md"):
         path = d / f"{name}.md"
     if not path.exists():
         available = sorted(p.name for p in d.glob("*.md"))
         raise PipelineError(
-            f"초안을 찾을 수 없습니다: {name}\n"
-            + ("  사용 가능: " + ", ".join(available) if available else "  drafts/ 가 비어 있습니다.")
+            f"글을 찾을 수 없습니다: {name}\n"
+            + ("  사용 가능: " + ", ".join(available) if available else "  posts/ 가 비어 있습니다.")
         )
     return path
 
 
-def run(cfg: dict[str, Any], draft_name: str, live: bool = False) -> str:
-    path = find_draft(cfg, draft_name)
+def run(cfg: dict[str, Any], post_path: Path | str, live: bool = True) -> str:
+    path = post_path if isinstance(post_path, Path) else find_post(cfg, post_path)
     post = frontmatter.load(path)
-
-    # 안전장치 2: 사람 검수 확인
-    if not post.get("reviewed"):
-        raise PipelineError(
-            f"{path.name} 은 아직 검수되지 않았습니다.\n"
-            "  초안을 읽고 실전 데이터를 채운 뒤, 프론트매터의 reviewed 를 true 로 바꾸세요.\n"
-            "  (CONTEXT.md 3-4: 완전 무인 발행 금지)"
-        )
 
     if post.get("published_url"):
         raise PipelineError(
@@ -169,7 +157,6 @@ def run(cfg: dict[str, Any], draft_name: str, live: bool = False) -> str:
     url = publisher.push(post, live=live)
 
     # dryrun 은 실제로 올라간 게 아니므로 발행 기록을 남기지 않는다
-    # (남기면 이후 진짜 발행이 중복으로 거부됨)
     if publisher.uploads:
         post["published_url"] = url
         path.write_text(frontmatter.dumps(post), encoding="utf-8")

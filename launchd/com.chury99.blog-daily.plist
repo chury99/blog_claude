@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.chury99.blog-daily</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/chury99/PycharmProjects/blog_claude/.venv/bin/python</string>
+        <string>/Users/chury99/PycharmProjects/blog_claude/pipeline.py</string>
+        <string>daily</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/chury99/PycharmProjects/blog_claude</string>
+
+    <!-- 매일 08:00. Mac 이 자고 있었으면 깨어난 직후 밀린 실행이 돈다. -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>8</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>/Users/chury99/PycharmProjects/blog_claude/logs/daily.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/chury99/PycharmProjects/blog_claude/logs/daily.log</string>
+</dict>
+</plist>

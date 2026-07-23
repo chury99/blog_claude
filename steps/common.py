@@ -18,6 +18,40 @@ class PipelineError(Exception):
     """파이프라인 실행 중 사용자가 고쳐야 하는 문제."""
 
 
+def load_secret_file(rel_path: str, key: str, *, how_to: str) -> str:
+    """config/ 아래 JSON 파일에서 비밀값 하나를 읽는다 (텔레그램과 같은 방식).
+
+    비밀값을 .env(환경변수)가 아니라 파일에 두면 실행할 때 export 가 필요 없다.
+    파일은 .gitignore 로 제외된다. how_to 는 값이 없을 때 보여줄 안내문.
+    """
+    path = ROOT / rel_path
+    if not path.exists():
+        raise PipelineError(f"설정 파일이 없습니다: {path}\n{how_to}")
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as e:
+        raise PipelineError(f"설정 파일을 읽지 못했습니다 ({path}): {e}") from e
+
+    value = str((data or {}).get(key, "") or "").strip()
+    if not value or value.startswith("여기에"):
+        raise PipelineError(f"설정 파일에 {key} 값이 없습니다 ({path}).\n{how_to}")
+
+    _warn_if_world_readable(path)
+    return value
+
+
+def _warn_if_world_readable(path: Path) -> None:
+    """자격증명 파일이 남에게도 읽히는 권한이면 경고한다."""
+    import stat
+
+    try:
+        mode = path.stat().st_mode
+    except OSError:
+        return
+    if mode & (stat.S_IRGRP | stat.S_IROTH):
+        print(f"[warn] {path} 를 다른 사용자도 읽을 수 있습니다. chmod 600 권장.")
+
+
 def load_config(path: str | Path = "config.yaml") -> dict[str, Any]:
     p = Path(path)
     if not p.is_absolute():
@@ -35,16 +69,16 @@ def load_prompt(cfg: dict[str, Any], name: str) -> str:
     return p.read_text(encoding="utf-8")
 
 
-def drafts_dir(cfg: dict[str, Any]) -> Path:
-    d = ROOT / cfg["paths"]["drafts"]
+def posts_dir(cfg: dict[str, Any]) -> Path:
+    d = ROOT / cfg["paths"]["posts"]
     d.mkdir(parents=True, exist_ok=True)
     return d
 
 
-def topics_path(cfg: dict[str, Any]) -> Path:
-    p = ROOT / cfg["paths"]["topics"]
-    p.parent.mkdir(parents=True, exist_ok=True)
-    return p
+def data_dir(cfg: dict[str, Any]) -> Path:
+    d = ROOT / cfg["paths"]["data"]
+    d.mkdir(parents=True, exist_ok=True)
+    return d
 
 
 def slugify(text: str) -> str:

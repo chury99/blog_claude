@@ -1,9 +1,17 @@
 # 비밀값
 .env
 
-# 생성된 초안 (사람 검수 대기 — 로컬에만 보관)
-drafts/*
-!drafts/.gitkeep
+# 생성된 글 (발행 기록 포함 — 로컬에만 보관)
+posts/*
+!posts/.gitkeep
+
+# 파이프라인 상태 (기수록 공시 등)
+data/*
+!data/.gitkeep
+
+# launchd 실행 로그
+logs/*
+!logs/.gitkeep
 
 # Python
 __pycache__/

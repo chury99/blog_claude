@@ -1,116 +1,127 @@
-# 콘텐츠 자동화 파이프라인 — 프로젝트 컨텍스트
+# 공시 브리핑 자동 블로그 — 프로젝트 컨텍스트
 
-> 이 문서는 Claude Code가 이 프로젝트를 이어받아 작업하기 위한 인수인계 문서입니다.
-> 지금까지 채팅에서 논의한 맥락, 결정사항, 제약조건, 앞으로 할 일을 담고 있습니다.
+> Claude Code가 이 프로젝트를 이어받아 작업하기 위한 문서.
+> 결정사항, 제약조건, 구조를 담는다. (2026-07-23 전면 재설계)
 
 ---
 
 ## 1. 프로젝트 한 줄 요약
 
-기존 기술 스택(Python + Claude Max 구독)을 활용해, **키워드 리서치 → 초안 생성 → 사람 검수 → 발행**으로 이어지는 반자동 블로그 콘텐츠 파이프라인을 만든다. 목적은 저자본·저노력 부수입 채널 구축.
+매일 아침 08시에 **국내주식 공시를 긍정 5개 · 부정 5개로 골라 각 3줄로 요약**한 글을
+블로그에 **자동 발행**해 수익을 창출한다. 운영자와의 소통은 텔레그램.
+
+핵심 차별점: **짧고 쉽게.** 장황하면 안 읽는다. 핵심만 3줄.
 
 ---
 
-## 2. 개발자 배경 (작업 시 참고)
+## 2. 개발자 배경
 
-- Python 개발자이자 알고리즘 트레이더. KRX 자동매매 시스템 구축 경험(Kiwoom API, asyncio, 백테스팅, 텔레그램 봇).
-- 서버는 **Mac Mini**. 원격 제어는 MacBook Air 사용.
-- **Claude Max 구독** 보유 → API 종량 과금 대신 `claude -p` 헤드리스 모드를 선호(구독 범위 내 비용 절약).
-- 코드베이스에 한글 식별자 사용 경험 있음(예: 손절, 익절). 한국어로 소통.
-- 실전 매매 데이터/백테스팅 경험 보유 → 이게 콘텐츠의 차별화(E-E-A-T) 자산.
+- Python 개발자이자 알고리즘 트레이더. KRX 자동매매 시스템 구축 경험(Kiwoom API, asyncio, 텔레그램 봇).
+- 서버는 **Mac Mini**. 원격 제어는 MacBook Air.
+- **Claude Pro 구독** 보유 → API 종량 과금 대신 `claude -p` 헤드리스 모드 사용.
+  (Pro 는 사용량 한도가 Max 보다 낮다. daily 1회에 claude 호출 약 12번 —
+  자동 실행 시 한도 초과 여부를 지켜봐야 한다.)
+- 한국어로 소통. 응답은 항상 한글.
 
 ---
 
-## 3. 핵심 결정사항 (왜 이렇게 정했는가)
+## 3. 핵심 결정사항
 
-### 3-1. 파이썬 vs 클로드 자동화 → **역할 분담**
-- **파이썬** = 파이프라인의 뼈대/지휘자. 순서 제어, 파일 저장, API 호출, 크론/launchd 스케줄링.
-- **클로드** = 그 중 "글쓰기" 한 단계만 담당하는 작업자.
-- 비유: 파이썬은 컨베이어벨트, 클로드는 벨트 위 한 자리의 조립 작업자.
+### 3-1. 콘텐츠 정의 (2026-07-23 사용자 확정)
+- 검색어 트렌드에서 **국내주식 관련 항목**을 찾아낸다.
+- 관련 공시(DART)를 파악해 **긍정 5개, 부정 5개로 제한**한다.
+- 각 공시를 **3줄 요약**한다. 쉽고 간단하게.
+- 트렌드에 걸린 종목의 공시를 최우선으로 다루되, 부족하면 그날의 주요 공시로 채운다.
 
-### 3-2. 글 생성은 API가 아니라 `claude -p` (헤드리스)
-- 이유: Max 구독이 있으므로 종량 과금 API 대신 CLI 호출로 추가 비용 최소화.
-- 파이썬에서 `subprocess`로 `claude -p "프롬프트"` 호출 → stdout으로 초안 회수.
+### 3-2. 자동 발행 전환 (구 원칙 폐기)
+- 구버전의 "완전 무인 발행 금지" 원칙은 **2026-07-23 사용자 결정으로 폐기**했다.
+  이 프로젝트는 매일 08시 무인 발행이 전제다.
+- 대신 다음 완화 장치를 둔다:
+  1. **킬스위치**: `config.yaml` 의 `publish.auto: false` 로 바꾸면 발행 없이 파일만 생성.
+  2. **실패 시 발행 안 함**: 파이프라인 어느 단계든 실패하면 불완전한 글을 올리지 않고
+     텔레그램으로 에러를 보고한다.
+  3. **사후 통보**: 발행 성공/실패/스킵 모두 텔레그램으로 알린다.
+  4. **지어내기 금지**: 공시 본문을 확보하지 못하면 제목에서 확실한 것만 쓴다.
+     모든 글 하단에 "투자 권유 아님" 디스클레이머 고정.
 
-### 3-3. 플랫폼 선택 → **Ghost(Pro)** 우선
-검토 결과(2026년 기준):
-- **Medium**: 2025년부터 신규 API 통합 토큰 발급 중단 → 자동 게시 신규 연동 불가. (수동 교차게시로 노출 보조만 가능)
-- **Substack**: 공식 공개 API 없음. 비공식 리버스엔지니어링 API는 계정 정지 리스크.
-- **Ghost(Pro)**: 공식 Admin API 견고, 0% 플랫폼 수수료, 강한 SEO, 콘텐츠 소유권 완전 → **자동화 목적에 최적**.
-- **WordPress.com 호스팅형**: 서버 관리 없이 REST API 사용 가능(진입장벽은 자가호스팅일 뿐). 차선책.
-- 결론: MVP는 Ghost Admin API 기준으로 구현. 단, 발행 어댑터는 교체 가능하게 추상화.
+### 3-3. 데이터 소스
+- **공시**: DART OpenAPI (opendart.fss.or.kr, 무료. 인증키 필요 — `config/dart.json`).
+  - 목록: `list.json` (유가 Y / 코스닥 K, 상장사만)
+  - 본문: `document.xml` (zip) → 텍스트 추출 → 요약 입력으로 사용
+- **트렌드**: Google Trends RSS `trends.google.com/trending/rss?geo=KR` (시드 불필요, 무료).
+  pytrends 는 구글 백엔드 변경으로 seedless 엔드포인트가 404 → 사용하지 않는다.
+- 트렌드 검색어 → 상장사 연결은 Claude가 판단한다 (예: 인물·제품·사건 → 관련 종목).
 
-### 3-4. ⚠️ 완전 무인 발행 금지 (가장 중요한 제약)
-- 2026년 3월 구글 코어 업데이트가 "가치 없이 대량생산된 AI 콘텐츠"를 집중 단속 → 해당 사이트 트래픽 50~80% 소실 사례 다수.
-- 반면 진짜 가치를 주는 잘 만든 AI 콘텐츠는 보상받음(E-E-A-T: 경험·전문성·권위·신뢰).
-- **따라서 자동화는 "초안 생성"까지만. 발행은 사람 검수 후 명시적 승인(`--publish`)이 있어야 실행.**
-- 개발자의 실전 매매 데이터/경험을 글에 얹는 "편집 레이어"가 차별화 핵심.
+### 3-4. 글 생성은 `claude -p` (헤드리스)
+- Pro 구독 범위 내 CLI 호출. `subprocess` 로 stdout 회수.
+- 실행 파일은 `~/.local/bin/claude` 절대경로 고정 (launchd 는 PATH 가 최소한이라).
+
+### 3-5. 발행 플랫폼 → Ghost 우선, 어댑터로 추상화
+- Ghost Admin API (JWT 인증). `publish.adapter: dryrun` 으로 무발행 테스트 가능.
+- Medium(API 중단)/Substack(공식 API 없음)은 부적합 판정 유지.
+
+### 3-6. 스케줄링 — launchd 매일 08:00
+- `launchd/com.chury99.blog-daily.plist` (등록은 사용자가 직접).
+- Mac 이 잠들어 있으면 깨어난 직후 밀린 실행이 돈다(StartCalendarInterval 특성).
+  확실히 하려면 `pmset repeat wakeorpoweron MTWRFSU 07:55:00` 권장.
+
+### 3-7. 소통은 텔레그램
+- 자격증명은 `config/telegram.json` (git 제외, lotto_claude 와 동일 방식).
+- 발행 결과·에러·스킵 모두 알림. **발행 승인 기능은 두지 않는다** — 어차피 자동 발행이고,
+  중단은 킬스위치로 한다.
 
 ---
 
 ## 4. 파이프라인 구조
 
 ```
-[1. 주제수집] → [2. 초안생성] → [3. 사람검수 ⏸️] → [4. 발행]
-   pytrends/       claude -p        (수동 확인)      Ghost API
-   Reddit(praw)                                    (--publish 시에만)
-   + Claude 필터
+매일 08:00 (launchd)
+   │
+[1. 트렌드]  Google Trends RSS(KR) → Claude: 국내 상장사 관련 검색어만 추출
+   │
+[2. 공시수집] DART list.json (최근 N일, 상장사만, 기수록분 제외)
+   │           트렌드에 걸린 종목의 공시는 🔥 표시
+[3. 선정]    Claude: 긍정 5 + 부정 5 선정 (🔥 최우선, 다음은 중요도)
+   │
+[4. 요약]    공시별 본문(document.xml) 확보 → Claude: 3줄 요약
+   │
+[5. 조립]    posts/YYYYMMDD-brief.md (프론트매터 + 마크다운)
+   │
+[6. 발행]    publish.auto=true → Ghost 공개 발행 / false → 파일만
+   │
+[7. 알림]    텔레그램: 성공(링크)/실패(에러)/스킵(공시 없음)
 ```
 
-- **1단계 주제수집**: Google Trends(`pytrends`), Reddit 인기글(`praw`) 수집 → Claude로 스팸/무관 주제 필터링 → 상위 N개 선정.
-- **2단계 초안생성**: 선정된 주제별로 `claude -p` 호출 → 마크다운 초안을 로컬 파일로 저장(예: `drafts/YYYYMMDD-slug.md`).
-- **3단계 검수(안전장치)**: 파이프라인은 여기서 멈춤. 사람이 초안 확인·수정·경험 데이터 추가.
-- **4단계 발행**: `--publish` 플래그와 함께 실행할 때만 Ghost Admin API로 업로드. 기본은 draft 상태로.
+- 다룬 공시는 `data/seen.json` 에 기록해 다음 날 중복 게재를 막는다.
+- 공시가 0건(휴일 등)이면 발행을 건너뛰고 텔레그램으로만 알린다.
 
 ---
 
-## 5. 기술 스택 / 의존성 (예정)
-
-- Python 3.11+
-- `pytrends` — Google Trends 수집
-- `praw` — Reddit API (선택)
-- `requests` / `pyjwt` — Ghost Admin API 인증(JWT) 및 호출
-- `python-frontmatter` — 마크다운 초안 메타데이터 관리
-- `claude` CLI (헤드리스 `-p` 모드) — 로컬 설치 필요
-- 스케줄링: cron 또는 macOS launchd
-
----
-
-## 6. 제안 프로젝트 구조 (Claude Code가 만들 것)
+## 5. CLI
 
 ```
-content-pipeline/
-├── CONTEXT.md              # 이 문서
-├── config.yaml             # 키워드 시드, 발행 대상, N값 등 설정
-├── .env                    # Ghost API 키 등 비밀값 (git 제외)
-├── pipeline.py             # 메인 오케스트레이터 (CLI 진입점)
-├── steps/
-│   ├── collect.py          # 1단계: 주제수집 + Claude 필터
-│   ├── generate.py         # 2단계: claude -p 호출로 초안 생성
-│   └── publish.py          # 4단계: Ghost 발행 어댑터 (추상화)
-├── drafts/                 # 생성된 초안 (사람 검수 대기)
-└── prompts/
-    ├── filter.txt          # 주제 필터링용 프롬프트
-    └── write.txt           # 글쓰기용 프롬프트
+python pipeline.py daily            # 전체 실행 (08시 launchd 가 부르는 진입점)
+python pipeline.py daily --dry-run  # 발행·기록 없이 글 생성까지만
+python pipeline.py trends           # 1단계만 (디버그)
+python pipeline.py dart             # 2단계만 (디버그)
+python pipeline.py publish <파일> --live   # 생성된 글 수동 발행 (auto=false 운용 시)
+python pipeline.py telegram setup|test
 ```
 
 ---
 
-## 7. Claude Code에게 요청할 첫 작업 (제안)
+## 6. 비밀값 취급
 
-1. 위 구조로 스캐폴딩 생성.
-2. `pipeline.py`에 CLI 뼈대 구현: `python pipeline.py --collect` / `--generate` / `--publish` 단계별 실행. 기본은 발행 안 함(draft).
-3. `steps/generate.py`에 `claude -p` subprocess 호출 로직 우선 구현(가장 핵심). 나머지 단계는 mock/stub으로 두고 점진 확장.
-4. 발행 전 반드시 사람 검수를 강제하는 안전장치(기본 draft, `--publish` 명시 필요)를 코드에 반영.
-
-> 우선순위: **2단계(초안 생성) → 1단계(수집) → 4단계(발행)** 순으로 붙이는 게 검증하기 쉬움.
-> 1단계 없이도 주제를 수동으로 하나 넣어 2단계만 먼저 돌려보면 전체 흐름이 빨리 확인됨.
+- `.env` (git 제외): `GHOST_ADMIN_API_KEY`
+- `config/dart.json` (git 제외): DART 인증키 (`api_key`)
+- `config/telegram.json` (git 제외): 텔레그램 토큰/채팅ID
+- `config.yaml` 에는 비밀값을 두지 않는다. 에러 메시지에 토큰을 싣지 않는다.
 
 ---
 
-## 8. 열린 질문 (작업 중 개발자에게 확인 필요)
+## 7. 미결 사항
 
-- Ghost는 Ghost(Pro) 호스팅을 쓸 것인가, 자가호스팅할 것인가? (API 사용법은 동일)
-- 글로벌 타깃이면 언어는 영어로 생성할 것인가, 한글 후 번역할 것인가?
-- 초기 니치(주제 분야)는? 트레이딩/투자 경험을 살릴지, 무관한 분야로 갈지.
-- 주제수집 소스는 Google Trends만으로 시작할지, Reddit도 포함할지.
+- Ghost 사이트 미개설 — `publish.ghost.api_url` 이 아직 `CHANGE-ME`.
+- DART 인증키 — 발급 완료, `config/dart.json` 에 저장됨. (실호출 검증 완료)
+- launchd 미등록 — 위 두 개가 채워진 뒤 사용자가 등록.
+- 수익화 방식(광고/제휴)은 코드 범위 밖. 블로그 개설 후 별도 논의.
