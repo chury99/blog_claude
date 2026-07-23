@@ -69,12 +69,6 @@ def load_prompt(cfg: dict[str, Any], name: str) -> str:
     return p.read_text(encoding="utf-8")
 
 
-def posts_dir(cfg: dict[str, Any]) -> Path:
-    d = ROOT / cfg["paths"]["posts"]
-    d.mkdir(parents=True, exist_ok=True)
-    return d
-
-
 def data_dir(cfg: dict[str, Any]) -> Path:
     d = ROOT / cfg["paths"]["data"]
     d.mkdir(parents=True, exist_ok=True)

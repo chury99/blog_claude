@@ -21,6 +21,33 @@ import requests
 
 from .common import PipelineError, data_dir, load_secret_file
 
+# 주가와 무관한 순수 절차성/보고성 공시 유형 — 후보에서 미리 제외한다.
+# (전체의 절반 이상이 이런 것들이라, 안 거르면 대형주의 이런 공시가 후보 풀을
+#  가득 채워 정작 중요한 공시를 밀어낸다.)
+_ROUTINE_TYPES = (
+    "소유상황보고서",            # 임원ㆍ주요주주 특정증권등 소유상황(최다 빈도)
+    "대량보유상황보고서",        # 5% 룰
+    "최대주주등소유주식변동",
+    "특정증권등거래계획보고서",
+    "투자설명서",
+    "일괄신고추가서류",
+    "증권발행실적보고서",
+    "증권신고서",
+    "기업설명회",
+    "결산실적공시예고",          # '예고'일 뿐 실적 자체 아님
+    "주주명부폐쇄",
+    "기준일설정",
+    "주주총회소집",
+    "의결권대리행사권유",
+    "대규모기업집단현황",
+    "조회공시",
+)
+
+
+def _is_routine(report_nm: str) -> bool:
+    return any(k in report_nm for k in _ROUTINE_TYPES)
+
+
 _LIST_URL = "https://opendart.fss.or.kr/api/list.json"
 _DOC_URL = "https://opendart.fss.or.kr/api/document.xml"
 _VIEWER_URL = "https://dart.fss.or.kr/dsaf001/main.do?rcpNo={rcept_no}"
@@ -77,11 +104,13 @@ def fetch_disclosures(cfg: dict[str, Any]) -> list[dict[str, Any]]:
                     f"DART list.json 오류 (status={status}): {body.get('message', '')}"
                 )
             for item in body.get("list", []):
-                if not item.get("stock_code", "").strip():
+                code = item.get("stock_code", "").strip()
+                if not code:
                     continue  # 비상장 제외
                 out.append(
                     {
                         "rcept_no": item["rcept_no"],
+                        "stock_code": code,
                         "corp_name": item["corp_name"],
                         "report_nm": item["report_nm"].strip(),
                         "rcept_dt": item["rcept_dt"],
@@ -97,30 +126,33 @@ def fetch_disclosures(cfg: dict[str, Any]) -> list[dict[str, Any]]:
     return list(uniq.values())
 
 
-def build_pool(
-    cfg: dict[str, Any], trend_stocks: list[dict[str, Any]]
-) -> list[dict[str, Any]]:
-    """선정 단계에 넘길 후보 풀. 기수록분 제외, 트렌드 종목 🔥 표시, 상한 적용."""
+def disclosures_for_codes(
+    cfg: dict[str, Any], codes: list[str]
+) -> dict[str, list[dict[str, Any]]]:
+    """주어진 종목코드들의 공시를 {code: [공시,...]} 로. 최신순, 종목당 상한 적용.
+
+    - 절차성 공시(_ROUTINE_TYPES)와 기수록분(seen)은 제외.
+    - 종목코드로 매칭하므로 회사명 모호성이 없다.
+    """
+    codes = list(codes)
+    wanted = set(codes)
     seen = load_seen(cfg)
-    pool = [d for d in fetch_disclosures(cfg) if d["rcept_no"] not in seen]
+    raw = fetch_disclosures(cfg)
+    rel = [
+        d for d in raw
+        if d["stock_code"] in wanted
+        and d["rcept_no"] not in seen
+        and not _is_routine(d["report_nm"])
+    ]
+    print(f"[dart] 인기종목 관련 공시 {len(rel)}건 (원본 {len(raw)}건)")
 
-    # 정확 일치만 🔥. 부분문자열로 매칭하면 "국전" 이 "한국전력공사" 에 걸리는
-    # 식의 오탐이 난다(짧은 회사명이 다른 회사명의 일부가 되는 경우).
-    trend_names = {t["corp_name"].replace(" ", "") for t in trend_stocks}
-    for d in pool:
-        d["hot"] = d["corp_name"].replace(" ", "") in trend_names
-
-    hot_count = sum(d["hot"] for d in pool)
-    if hot_count:
-        print(f"[dart] 트렌드 매칭 공시 🔥 {hot_count}건")
-
-    # 🔥 우선, 그 안에서는 최신순 → 상한을 잘라도 🔥 는 살아남는다
-    pool.sort(key=lambda d: (not d["hot"], -int(d["rcept_dt"])))
-    max_pool = cfg["dart"]["max_pool"]
-    if len(pool) > max_pool:
-        print(f"[dart] 후보 {len(pool)}건 → 상한 {max_pool}건으로 자름")
-        pool = pool[:max_pool]
-    return pool
+    max_per = cfg["dart"]["max_per_stock"]
+    by_code: dict[str, list[dict[str, Any]]] = {}
+    for d in sorted(rel, key=lambda d: -int(d["rcept_no"])):  # 최신순
+        by_code.setdefault(d["stock_code"], [])
+        if len(by_code[d["stock_code"]]) < max_per:
+            by_code[d["stock_code"]].append(d)
+    return by_code
 
 
 def fetch_document_text(cfg: dict[str, Any], rcept_no: str) -> str | None:

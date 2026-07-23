@@ -1,74 +1,61 @@
-# 공시 브리핑 자동 블로그 — 프로젝트 컨텍스트
+# 네이버 인기종목 공시 브리핑 — 프로젝트 컨텍스트
 
-> Claude Code가 이 프로젝트를 이어받아 작업하기 위한 문서.
-> 결정사항, 제약조건, 구조를 담는다. (2026-07-23 전면 재설계)
+> Claude Code 가 이 프로젝트를 이어받아 작업하기 위한 문서.
+> 결정사항·제약·구조를 담는다. (2026-07-24 컨셉 확정)
 
 ---
 
-## 1. 프로젝트 한 줄 요약
+## 1. 한 줄 요약
 
-매일 아침 08시에 **국내주식 공시를 긍정 5개 · 부정 5개로 골라 각 3줄로 요약**한 글을
-블로그에 **자동 발행**해 수익을 창출한다. 운영자와의 소통은 텔레그램.
-
-핵심 차별점: **짧고 쉽게.** 장황하면 안 읽는다. 핵심만 3줄.
+매일 아침 08시, **네이버 금융 인기 검색 종목 TOP 20** 중 공시가 있는 종목을 찾아
+그 공시를 **3줄(핵심 / 세부·해석 / 예상 주가 방향)**로 정리한 HTML 리포트를 자체
+웹서버에 올리고, 텔레그램으로 링크를 보낸다. 짧고 쉽게가 차별점.
 
 ---
 
 ## 2. 개발자 배경
 
-- Python 개발자이자 알고리즘 트레이더. KRX 자동매매 시스템 구축 경험(Kiwoom API, asyncio, 텔레그램 봇).
-- 서버는 **Mac Mini**. 원격 제어는 MacBook Air.
-- **Claude Pro 구독** 보유 → API 종량 과금 대신 `claude -p` 헤드리스 모드 사용.
-  (Pro 는 사용량 한도가 Max 보다 낮다. daily 1회에 claude 호출 약 12번 —
-  자동 실행 시 한도 초과 여부를 지켜봐야 한다.)
+- Python 개발자이자 알고리즘 트레이더. 서버는 **Mac Mini**(hostname MacMini), 원격은 MacBook Air.
+- **Claude Pro** 구독 (Max 아님) → `claude -p` 헤드리스 CLI 사용. daily 1회에 호출이
+  공시 건수만큼(보통 10~20회) 나가므로 사용량 한도를 지켜봐야 함. [[claude-plan-pro]]
 - 한국어로 소통. 응답은 항상 한글.
 
 ---
 
 ## 3. 핵심 결정사항
 
-### 3-1. 콘텐츠 정의 (2026-07-23 사용자 확정)
-- 검색어 트렌드에서 **국내주식 관련 항목**을 찾아낸다.
-- 관련 공시(DART)를 파악해 **긍정 5개, 부정 5개로 제한**한다.
-- 각 공시를 **3줄 요약**한다. 쉽고 간단하게.
-- 트렌드에 걸린 종목의 공시를 최우선으로 다루되, 부족하면 그날의 주요 공시로 채운다.
+### 3-1. 컨셉 확정 (2026-07-24)
+- 구글 트렌드는 **폐기**했다(연예·스포츠 노이즈가 많고 종목 연결이 불명확).
+- **네이버 인기 검색 종목**만 신호로 쓴다 — 투자자가 실제로 검색하는 종목이라
+  공시와 직접 연결된다. 종목코드로 매칭하므로 회사명 모호성이 없다.
+- TOP 20 중 최근 공시가 있는 종목만 다룬다. 방향(긍정/부정/중립)은 공시별로 판정.
 
-### 3-2. 자동 발행 전환 (구 원칙 폐기)
-- 구버전의 "완전 무인 발행 금지" 원칙은 **2026-07-23 사용자 결정으로 폐기**했다.
-  이 프로젝트는 매일 08시 무인 발행이 전제다.
-- 대신 다음 완화 장치를 둔다:
-  1. **킬스위치**: `config.yaml` 의 `publish.auto: false` 로 바꾸면 발행 없이 파일만 생성.
-  2. **실패 시 발행 안 함**: 파이프라인 어느 단계든 실패하면 불완전한 글을 올리지 않고
-     텔레그램으로 에러를 보고한다.
-  3. **사후 통보**: 발행 성공/실패/스킵 모두 텔레그램으로 알린다.
-  4. **지어내기 금지**: 공시 본문을 확보하지 못하면 제목에서 확실한 것만 쓴다.
-     모든 글 하단에 "투자 권유 아님" 디스클레이머 고정.
+### 3-2. 데이터 소스
+- **인기종목**: 네이버 금융 `finance.naver.com/sise/lastsearch2.naver` (euc-kr HTML 파싱).
+  - 네이버 실시간 검색어(범용)는 2021년 폐지 → 금융 인기검색종목이 대안.
+- **공시**: DART OpenAPI (opendart.fss.or.kr, 무료. 인증키는 `config/dart.json`).
+  - 목록 `list.json` 은 **날짜(rcept_dt)만** 주고 시각은 없다(접수번호 뒷자리는 순번).
+  - 본문 `document.xml` → 텍스트 추출 → 3줄 요약 입력.
+  - **절차성 공시 제외**: 임원 소유상황보고서 등(전체의 절반 이상)은 `dart._ROUTINE_TYPES`
+    로 후보에서 뺀다. 안 그러면 대형주의 이런 공시가 후보를 채운다.
 
-### 3-3. 데이터 소스
-- **공시**: DART OpenAPI (opendart.fss.or.kr, 무료. 인증키 필요 — `config/dart.json`).
-  - 목록: `list.json` (유가 Y / 코스닥 K, 상장사만)
-  - 본문: `document.xml` (zip) → 텍스트 추출 → 요약 입력으로 사용
-- **트렌드**: Google Trends RSS `trends.google.com/trending/rss?geo=KR` (시드 불필요, 무료).
-  pytrends 는 구글 백엔드 변경으로 seedless 엔드포인트가 404 → 사용하지 않는다.
-- 트렌드 검색어 → 상장사 연결은 Claude가 판단한다 (예: 인물·제품·사건 → 관련 종목).
+### 3-3. 글 생성은 `claude -p` (헤드리스)
+- `~/.local/bin/claude` 절대경로 고정 (launchd 는 PATH 가 최소한이라).
+- 공시별로 1회 호출, {"direction","lines"} JSON 반환. 요약 말끝은 음슴체(했음/뜻임).
 
-### 3-4. 글 생성은 `claude -p` (헤드리스)
-- Pro 구독 범위 내 CLI 호출. `subprocess` 로 stdout 회수.
-- 실행 파일은 `~/.local/bin/claude` 절대경로 고정 (launchd 는 PATH 가 최소한이라).
+### 3-4. 출력·발행
+- Ghost 등 블로그 플랫폼을 쓰지 않는다. **HTML 파일을 자체 웹서버 폴더에 직접 저장**한다.
+  - 폴더: `config.yaml` 의 `report.web_dir` (외장 SSD `/Volumes/extSSD4tb/90_web/kakao/클로드수행결과`)
+  - 주소: `report.url_base` (`goniee.iptime.org/kakao/클로드수행결과`) + 파일명
+- 실패 시 리포트를 올리지 않고 텔레그램으로 에러 보고. 다룬 공시는 `data/seen.json`
+  에 기록해 다음 날 중복 게재를 막는다.
 
-### 3-5. 발행 플랫폼 → Ghost 우선, 어댑터로 추상화
-- Ghost Admin API (JWT 인증). `publish.adapter: dryrun` 으로 무발행 테스트 가능.
-- Medium(API 중단)/Substack(공식 API 없음)은 부적합 판정 유지.
+### 3-5. 스케줄링 — launchd 매일 08:00
+- `launchd/com.chury99.blog-daily.plist`. Mac 이 자면 깨어난 직후 밀린 실행이 돈다.
+  확실히 하려면 `pmset repeat wakeorpoweron MTWRFSU 07:55:00`.
 
-### 3-6. 스케줄링 — launchd 매일 08:00
-- `launchd/com.chury99.blog-daily.plist` (등록은 사용자가 직접).
-- Mac 이 잠들어 있으면 깨어난 직후 밀린 실행이 돈다(StartCalendarInterval 특성).
-  확실히 하려면 `pmset repeat wakeorpoweron MTWRFSU 07:55:00` 권장.
-
-### 3-7. 소통은 텔레그램
-- 자격증명은 `config/telegram.json` (git 제외, lotto_claude 와 동일 방식).
-- 발행 결과·에러·스킵 모두 알림. **발행 승인 기능은 두지 않는다** — 어차피 자동 발행이고,
-  중단은 킬스위치로 한다.
+### 3-6. 소통은 텔레그램
+- 자격증명은 `config/telegram.json` (git 제외). 결과·에러·스킵 모두 알림.
 
 ---
 
@@ -76,52 +63,39 @@
 
 ```
 매일 08:00 (launchd)
-   │
-[1. 트렌드]  Google Trends RSS(KR) → Claude: 국내 상장사 관련 검색어만 추출
-   │
-[2. 공시수집] DART list.json (최근 N일, 상장사만, 기수록분 제외)
-   │           트렌드에 걸린 종목의 공시는 🔥 표시
-[3. 선정]    Claude: 긍정 5 + 부정 5 선정 (🔥 최우선, 다음은 중요도)
-   │
-[4. 요약]    공시별 본문(document.xml) 확보 → Claude: 3줄 요약
-   │
-[5. 조립]    posts/YYYYMMDD-brief.md (프론트매터 + 마크다운)
-   │
-[6. 발행]    publish.auto=true → Ghost 공개 발행 / false → 파일만
-   │
-[7. 알림]    텔레그램: 성공(링크)/실패(에러)/스킵(공시 없음)
+[1.네이버 TOP20] → [2.종목코드로 공시 매칭] → [3.공시별 3줄 요약+방향]
+   naver.py         dart.disclosures_for_codes    brief.summarize_stocks
+→ [4.HTML 렌더+서버 저장] → [5.텔레그램 링크]
+   report.save            notify.send
 ```
 
-- 다룬 공시는 `data/seen.json` 에 기록해 다음 날 중복 게재를 막는다.
-- 공시가 0건(휴일 등)이면 발행을 건너뛰고 텔레그램으로만 알린다.
+- 공시 있는 종목이 0이면(휴일 등) 리포트를 건너뛰고 텔레그램으로만 알린다.
 
 ---
 
 ## 5. CLI
 
 ```
-python pipeline.py daily            # 전체 실행 (08시 launchd 가 부르는 진입점)
-python pipeline.py daily --dry-run  # 발행·기록 없이 글 생성까지만
-python pipeline.py trends           # 1단계만 (디버그)
-python pipeline.py dart             # 2단계만 (디버그)
-python pipeline.py publish <파일> --live   # 생성된 글 수동 발행 (auto=false 운용 시)
+python pipeline.py daily            # 전체 실행 (launchd 진입점)
+python pipeline.py daily --dry-run  # 저장만, 텔레그램·기록 없이
+python pipeline.py naver            # 인기 검색 종목 (디버그)
+python pipeline.py dart             # 인기종목 공시 매칭 (디버그)
 python pipeline.py telegram setup|test
 ```
 
 ---
 
-## 6. 비밀값 취급
+## 6. 비밀값
 
-- `.env` (git 제외): `GHOST_ADMIN_API_KEY`
 - `config/dart.json` (git 제외): DART 인증키 (`api_key`)
 - `config/telegram.json` (git 제외): 텔레그램 토큰/채팅ID
 - `config.yaml` 에는 비밀값을 두지 않는다. 에러 메시지에 토큰을 싣지 않는다.
 
 ---
 
-## 7. 미결 사항
+## 7. 미결/한계
 
-- Ghost 사이트 미개설 — `publish.ghost.api_url` 이 아직 `CHANGE-ME`.
-- DART 인증키 — 발급 완료, `config/dart.json` 에 저장됨. (실호출 검증 완료)
-- launchd 미등록 — 위 두 개가 채워진 뒤 사용자가 등록.
-- 수익화 방식(광고/제휴)은 코드 범위 밖. 블로그 개설 후 별도 논의.
+- **공시 시각**: DART 가 날짜만 제공 → 리포트에 날짜만 표시. 분 단위 시각이 필요하면
+  한국거래소 KIND(kind.krx.co.kr) 를 보조 소스로 붙이는 방안 검토 가능.
+- 리포트 저장은 외장 SSD 마운트 전제. 미마운트 시 report.save 가 에러 → 텔레그램 알림.
+- 수익화(광고/제휴)는 코드 범위 밖.

@@ -16,6 +16,13 @@
     <key>WorkingDirectory</key>
     <string>/Users/chury99/PycharmProjects/blog_claude</string>
 
+    <!-- launchd 는 PATH 가 최소한이라 claude CLI 등이 있는 경로를 넣어준다. -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/Users/chury99/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+
     <!-- 매일 08:00. Mac 이 자고 있었으면 깨어난 직후 밀린 실행이 돈다. -->
     <key>StartCalendarInterval</key>
     <dict>

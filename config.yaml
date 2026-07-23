@@ -1,54 +1,44 @@
-# 공시 브리핑 자동 블로그 설정
-# 비밀값(API 키)은 여기 두지 말 것. .env / config/telegram.json 사용.
+# 네이버 인기검색종목 기반 공시 브리핑 설정
+# 비밀값(API 키)은 여기 두지 말 것. .env / config/*.json 사용.
 
-# 1단계: 트렌드 수집
-trends:
-  # 국가별 실시간 인기 검색어 RSS (trends.google.com/trending/rss?geo=..)
-  geos:
-    - KR
+# 1단계: 네이버 금융 인기 검색 종목 (투자자 관심 종목)
+naver:
+  enabled: true
+  top_n: 20   # 상위 N개 종목을 보고 그중 공시 있는 종목을 다룬다
 
-# 2단계: DART 공시 수집 (인증키는 .env 의 DART_API_KEY)
+# 2단계: DART 공시 (인증키는 config/dart.json)
 dart:
-  # 오늘부터 며칠 전까지의 공시를 후보로 볼지 (주말·휴일 대비 여유)
+  # 오늘부터 며칠 전까지의 공시를 볼지 (주말·휴일 대비 여유)
   lookback_days: 3
   # 시장 구분: Y=유가증권(코스피), K=코스닥
   corp_cls: [Y, K]
-  # Claude 선정 단계에 넘길 후보 공시 최대 수 (트렌드 매칭분은 항상 포함)
-  max_pool: 150
-  # 3줄 요약에 넣을 공시 본문 최대 글자 수 (넘으면 앞부분만)
+  # 종목당 정리할 공시 최대 수 (여러 개면 최신순으로)
+  max_per_stock: 2
+  # 3줄 요약에 넣을 공시 본문 최대 글자 수
   doc_max_chars: 6000
 
-# 3-4단계: 선정·요약
+# 3단계: 요약
 brief:
-  positive_count: 5
-  negative_count: 5
   summary_lines: 3
 
 # claude CLI (헤드리스 -p 호출)
 generate:
   # launchd/cron 은 PATH 가 최소한이라 절대경로로 둔다.
   claude_bin: "/Users/chury99/.local/bin/claude"
-  # 호출 1건당 타임아웃(초)
   timeout: 300
 
-# 6단계: 발행
-publish:
-  # 킬스위치: false 면 발행하지 않고 posts/ 에 파일만 만든다.
-  auto: true
-  # 발행 어댑터: ghost | dryrun
-  adapter: ghost
-  ghost:
-    # 예: https://your-site.ghost.io
-    api_url: "https://CHANGE-ME.ghost.io"
-    api_version: "v5.0"
+# 4단계: HTML 리포트 출력 (자체 웹서버로 서빙되는 폴더에 저장)
+report:
+  # HTML 을 저장할 로컬 폴더 (웹서버가 이 폴더를 서빙)
+  web_dir: "/Volumes/extSSD4tb/90_web/kakao/클로드수행결과"
+  # 위 폴더가 열리는 웹 주소 (파일명이 뒤에 붙는다)
+  url_base: "http://goniee.iptime.org/kakao/클로드수행결과"
 
-# 7단계: 텔레그램 알림 (자격증명은 config/telegram.json — git 제외)
+# 5단계: 텔레그램 알림 (자격증명은 config/telegram.json)
 notify:
   telegram:
     enabled: true
-    # config_path: "config/telegram.json"  # 기본값. 바꿀 때만 지정.
 
 paths:
-  posts: "posts"
   prompts: "prompts"
   data: "data"
