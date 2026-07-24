@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import sys
 import traceback
+from collections import Counter
 from datetime import datetime
 
 from steps import brief, dart, naver, notify, report
@@ -44,7 +45,12 @@ def cmd_daily(args, cfg) -> int:
         msg = "인기 검색 종목 중 다룰 새 공시가 없습니다. 리포트를 건너뜁니다."
         print(f"[daily] {msg}")
         if not dry:
-            notify.send(cfg, f"⏭️ <b>공시 브리핑 스킵</b>\n{notify.escape(msg)}")
+            notify.send(
+                cfg,
+                "<b>네이버 인기종목 공시 브리핑</b>\n"
+                f"<i>{now:%Y-%m-%d %H:%M} 기준</i>\n\n"
+                f"오늘은 다룰 새 공시가 없어 리포트를 건너뜁니다.",
+            )
         return 0
 
     # 4. HTML 리포트 렌더 + 서버 폴더 저장
@@ -55,16 +61,18 @@ def cmd_daily(args, cfg) -> int:
         return 0
 
     # 5. 기록(중복 게재 방지) + 텔레그램 알림
-    dart.mark_seen(cfg, [d for c in covered for d in c["disclosures"]])
-    n_disc = sum(len(c["disclosures"]) for c in covered)
-    names = ", ".join(c["name"] for c in covered)
+    disclosures = [d for c in covered for d in c["disclosures"]]
+    dart.mark_seen(cfg, disclosures)
+    dirs = Counter(d.get("direction", "중립") for d in disclosures)
+    names = ", ".join(f"{c['name']}({c['code']})" for c in covered)
     notify.send(
         cfg,
-        f"✅ <b>네이버 인기종목 공시 브리핑 완료</b>\n"
-        f"📅 {now:%Y-%m-%d %H:%M} 기준\n"
-        f"📈 공시 {len(covered)}종목 · {n_disc}건\n"
-        f"🏷 {notify.escape(names)}\n\n"
-        f'🔗 <a href="{url}">리포트 열기</a>',
+        "<b>네이버 인기종목 공시 브리핑</b>\n"
+        f"<i>{now:%Y-%m-%d %H:%M} 기준</i>\n\n"
+        f"공시 {len(covered)}종목 · {len(disclosures)}건\n"
+        f"긍정 {dirs['긍정']} · 부정 {dirs['부정']} · 중립 {dirs['중립']}\n\n"
+        f"{notify.escape(names)}\n\n"
+        f'<a href="{url}">리포트 열기</a>',
     )
     return 0
 
@@ -143,7 +151,7 @@ def main() -> int:
         print(f"\n오류: {e}", file=sys.stderr)
         # 무인 실행(daily)에서 죽으면 텔레그램으로도 알린다
         if args.command == "daily" and not args.dry_run:
-            notify.send(cfg, f"❌ <b>공시 브리핑 실패</b>\n{notify.escape(str(e))}")
+            notify.send(cfg, f"<b>공시 브리핑 실패</b>\n\n{notify.escape(str(e))}")
         return 1
     except KeyboardInterrupt:
         print("\n중단했습니다.", file=sys.stderr)
@@ -153,7 +161,7 @@ def main() -> int:
         err = traceback.format_exc()
         print(err, file=sys.stderr)
         if args.command == "daily" and not args.dry_run:
-            notify.send(cfg, f"❌ <b>공시 브리핑 실패 (예상외 오류)</b>\n{notify.escape(err[-800:])}")
+            notify.send(cfg, f"<b>공시 브리핑 실패 (예상외 오류)</b>\n\n{notify.escape(err[-800:])}")
         return 1
 
 

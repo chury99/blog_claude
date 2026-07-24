@@ -195,7 +195,7 @@ def check(cfg: dict[str, Any]) -> None:
     token, chat_id = load_credentials(path)
     bot = get_me(token)
     print(f"[notify] 봇 연결 OK: {bot.get('first_name')} (@{bot.get('username')})")
-    send_message(token, chat_id, "✅ 블로그 파이프라인 알림 연결 완료")
+    send_message(token, chat_id, "<b>알림 연결 완료</b>\n네이버 인기종목 공시 브리핑")
     print(f"[notify] 테스트 메시지 발송 OK (chat_id={chat_id})")
     print(f"[notify] 설정 파일: {path}")
 
@@ -235,5 +235,5 @@ def setup(cfg: dict[str, Any], token: str | None = None, chat_id: str | None = N
 
     saved = save_credentials(token, chat_id, path)
     print(f"[notify] 저장 완료: {saved}")
-    send_message(token, chat_id, "✅ 블로그 파이프라인 알림 연결 완료")
+    send_message(token, chat_id, "<b>알림 연결 완료</b>\n네이버 인기종목 공시 브리핑")
     print("[notify] 테스트 메시지 발송 OK")
