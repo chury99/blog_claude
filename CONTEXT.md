@@ -40,7 +40,8 @@
     로 후보에서 뺀다. 안 그러면 대형주의 이런 공시가 후보를 채운다.
 
 ### 3-3. 글 생성은 `claude -p` (헤드리스)
-- `~/.local/bin/claude` 절대경로 고정 (launchd 는 PATH 가 최소한이라).
+- `~/.local/bin/claude` 절대경로 고정 (cron 은 PATH 가 최소한이라). `PATH=/usr/bin:/bin`
+  환경에서도 정상 동작 확인됨.
 - 공시별로 1회 호출, {"direction","lines"} JSON 반환. 요약 말끝은 음슴체(했음/뜻임).
 
 ### 3-4. 출력·발행
@@ -50,9 +51,12 @@
 - 실패 시 리포트를 올리지 않고 텔레그램으로 에러 보고. 다룬 공시는 `data/seen.json`
   에 기록해 다음 날 중복 게재를 막는다.
 
-### 3-5. 스케줄링 — launchd 매일 08:00
-- `launchd/com.chury99.blog-daily.plist`. Mac 이 자면 깨어난 직후 밀린 실행이 돈다.
-  확실히 하려면 `pmset repeat wakeorpoweron MTWRFSU 07:55:00`.
+### 3-5. 스케줄링 — cron 매일 08:00
+- 다른 프로젝트(`/Users/sh/*.sh` + crontab)와 동일한 방식으로 통일했다.
+  `cron/blog_claude.sh` 를 `/Users/sh/blog_claude.sh` 로 배포하고 crontab 에
+  `0 8 * * * /Users/sh/blog_claude.sh` 를 추가한다. 로그는 iCloud
+  `python_log/blog_claude_YYYYMMDD.log`.
+- cron 은 잠든 Mac 을 못 깨운다. 확실히 하려면 `pmset repeat wakeorpoweron MTWRFSU 07:55:00`.
 
 ### 3-6. 소통은 텔레그램
 - 자격증명은 `config/telegram.json` (git 제외). 결과·에러·스킵 모두 알림.
@@ -62,7 +66,7 @@
 ## 4. 파이프라인 구조
 
 ```
-매일 08:00 (launchd)
+매일 08:00 (cron)
 [1.네이버 TOP20] → [2.종목코드로 공시 매칭] → [3.공시별 3줄 요약+방향]
    naver.py         dart.disclosures_for_codes    brief.summarize_stocks
 → [4.HTML 렌더+서버 저장] → [5.텔레그램 링크]
@@ -76,7 +80,7 @@
 ## 5. CLI
 
 ```
-python pipeline.py daily            # 전체 실행 (launchd 진입점)
+python pipeline.py daily            # 전체 실행 (cron 진입점)
 python pipeline.py daily --dry-run  # 저장만, 텔레그램·기록 없이
 python pipeline.py naver            # 인기 검색 종목 (디버그)
 python pipeline.py dart             # 인기종목 공시 매칭 (디버그)

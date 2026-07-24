@@ -7,7 +7,7 @@
 설계 배경은 [CONTEXT.md](CONTEXT.md) 참고.
 
 ```
-매일 08:00 (launchd)
+매일 08:00 (cron)
 [1.네이버 TOP20] → [2.종목코드로 공시 매칭] → [3.공시별 3줄 요약+방향] → [4.HTML 서버 저장] → [5.텔레그램]
  finance.naver     DART OpenAPI               claude -p              report.web_dir     링크 발송
 ```
@@ -31,27 +31,32 @@ curl -fsSL https://claude.ai/install.sh | bash
 ## 사용
 
 ```bash
-python pipeline.py daily            # 전체 실행 (launchd 진입점)
+python pipeline.py daily            # 전체 실행 (cron 진입점)
 python pipeline.py daily --dry-run  # 저장만, 텔레그램·기록 없이
 python pipeline.py naver            # 인기 검색 종목 (디버그)
 python pipeline.py dart             # 인기종목 공시 매칭 (디버그)
 python pipeline.py telegram test    # 알림 점검
 ```
 
-## 매일 08시 자동 실행 (launchd)
+## 매일 08시 자동 실행 (cron)
+
+다른 프로젝트(`/Users/sh/*.sh`)와 동일하게, 실행 스크립트를 `/Users/sh` 에 두고
+crontab 에서 부른다. 스크립트 원본은 [cron/blog_claude.sh](cron/blog_claude.sh).
 
 ```bash
-cp launchd/com.chury99.blog-daily.plist ~/Library/LaunchAgents/
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.chury99.blog-daily.plist
+cp cron/blog_claude.sh /Users/sh/blog_claude.sh
+chmod +x /Users/sh/blog_claude.sh
 ```
 
-해제:
+crontab 에 아래 한 줄 추가 (`crontab -e`, 기존 항목은 유지):
 
-```bash
-launchctl bootout gui/$(id -u)/com.chury99.blog-daily
+```
+0 8 * * * /Users/sh/blog_claude.sh
 ```
 
-Mac 이 08시에 자고 있으면 깨어난 직후 밀린 실행이 돈다. 확실히 하려면:
+로그는 iCloud `python_log/blog_claude_YYYYMMDD.log` 에 날짜별로 쌓인다.
+
+cron 은 잠든 Mac 을 깨우지 못한다. 08시에 확실히 실행하려면 미리 깨워둔다:
 
 ```bash
 sudo pmset repeat wakeorpoweron MTWRFSU 07:55:00
@@ -79,9 +84,9 @@ steps/
   common.py          설정 로딩, JSON 추출 등 공용 유틸
 prompts/
   summarize.txt      3줄 요약 + 방향 판정 프롬프트
-launchd/             매일 08시 실행용 plist
+cron/                매일 08시 실행용 셸 스크립트 (→ /Users/sh 로 배포)
 data/                기수록 공시 기록 (git 제외)
-logs/                launchd 실행 로그 (git 제외)
+logs/                실행 로그 (git 제외; cron 로그는 iCloud python_log 에도 쌓임)
 ```
 
 ## 비밀값
