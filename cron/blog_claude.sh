@@ -21,4 +21,4 @@ VENV="$PROJECT/blog_claude/.venv"
 echo "" >> "$LOG"
 echo "----- $(date) -----" >> "$LOG"
 source "$VENV/bin/activate"
-$VENV/bin/python $PROJECT/blog_claude/pipeline.py daily >> "$LOG" 2>&1
+$VENV/bin/python $PROJECT/blog_claude/pipeline.py daily --skip-holiday >> "$LOG" 2>&1

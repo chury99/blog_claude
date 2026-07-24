@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 """네이버 인기종목 공시 브리핑 — CLI 진입점.
 
-매일 08:00 (launchd)
+매일 08:00 (cron)
   [1.네이버 인기종목 TOP20] → [2.그 종목들의 공시] → [3.3줄요약+방향]
   → [4.HTML 리포트 서버 저장] → [5.텔레그램 알림]
 
 사용법:
-  python pipeline.py daily            # 전체 실행 (launchd 가 부르는 진입점)
-  python pipeline.py daily --dry-run  # 저장만, 텔레그램·기록 없이
-  python pipeline.py naver            # 인기 검색 종목 (디버그)
-  python pipeline.py dart             # 인기종목 공시 매칭 (디버그)
+  python pipeline.py daily                 # 전체 실행 (cron 진입점)
+  python pipeline.py daily --skip-holiday  # 주말·공휴일이면 실행 안 함 (cron용)
+  python pipeline.py daily --dry-run       # 저장만, 텔레그램·기록 없이
+  python pipeline.py naver                 # 인기 검색 종목 (디버그)
+  python pipeline.py dart                  # 인기종목 공시 매칭 (디버그)
   python pipeline.py telegram setup|test
 """
 
@@ -22,7 +23,7 @@ from collections import Counter
 from datetime import datetime
 
 from steps import brief, dart, naver, notify, report
-from steps.common import PipelineError, load_config
+from steps.common import PipelineError, holiday_reason, load_config
 
 
 def cmd_daily(args, cfg) -> int:
@@ -30,6 +31,14 @@ def cmd_daily(args, cfg) -> int:
     now = datetime.now()
     if dry:
         print("[daily] --dry-run: 저장만 하고 텔레그램·기록은 생략합니다.")
+
+    # 0. 휴일이면 건너뛴다 (증시 휴장일엔 새 공시가 없음). cron 자동 실행 전용
+    #    플래그라 수동 실행(--skip-holiday 없이)에는 영향 없음. 조용히 종료한다.
+    if getattr(args, "skip_holiday", False):
+        reason = holiday_reason(now.date())
+        if reason:
+            print(f"[daily] 오늘은 휴일({reason})이라 실행을 건너뜁니다.")
+            return 0
 
     # 1. 네이버 인기 검색 종목 TOP N
     stocks = naver.fetch_popular_stocks(cfg)
@@ -112,10 +121,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("-c", "--config", default="config.yaml", help="설정 파일 경로")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    p_daily = sub.add_parser("daily", help="전체 파이프라인 실행 (launchd 진입점)")
+    p_daily = sub.add_parser("daily", help="전체 파이프라인 실행 (cron 진입점)")
     p_daily.add_argument(
         "--dry-run", action="store_true",
         help="저장만 하고 텔레그램·기록은 생략",
+    )
+    p_daily.add_argument(
+        "--skip-holiday", action="store_true",
+        help="주말·공휴일이면 실행하지 않고 종료 (cron 자동 실행용)",
     )
     p_daily.set_defaults(func=cmd_daily)
 

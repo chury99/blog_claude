@@ -24,6 +24,8 @@
 - 텔레그램 알림(성공/스킵/에러) — 이모지 없이 방향 집계·종목코드 포함
 - **cron 매일 08:00 등록 완료**: `/Users/sh/blog_claude.sh` + crontab
   `0 8 * * * /Users/sh/blog_claude.sh`. 최소 환경(PATH=/usr/bin:/bin)에서 동작 확인.
+  스크립트는 `daily --skip-holiday` 로 부른다 → 주말·공휴일(`holidays` 라이브러리)엔
+  자동 실행이 조용히 걸러진다(수동 실행엔 영향 없음).
 
 ## 무엇이 아직인가
 

@@ -6,6 +6,7 @@ import hashlib
 import json
 import re
 import unicodedata
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -13,9 +14,33 @@ import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
 
+_WEEKDAY_KR = ("월", "화", "수", "목", "금", "토", "일")
+
 
 class PipelineError(Exception):
     """파이프라인 실행 중 사용자가 고쳐야 하는 문제."""
+
+
+def holiday_reason(day: date | None = None) -> str | None:
+    """휴일이면 사유(주말/공휴일명), 영업일이면 None.
+
+    한국 증시가 쉬는 날(주말·공휴일)에는 새 공시가 없으므로, 08시 자동 실행을
+    이 값으로 건너뛴다. 공휴일 판정은 holidays 라이브러리(SouthKorea)를 쓰되,
+    없으면 주말만이라도 거른다.
+    """
+    day = day or date.today()
+    try:
+        import holidays
+
+        kr = holidays.SouthKorea(years=day.year)
+        name = kr.get(day)
+        if name:
+            return str(name)
+    except ImportError:
+        print("[warn] holidays 미설치 — 공휴일 판정 없이 주말만 거릅니다.")
+    if day.weekday() >= 5:  # 토(5)·일(6)
+        return f"주말({_WEEKDAY_KR[day.weekday()]})"
+    return None
 
 
 def load_secret_file(rel_path: str, key: str, *, how_to: str) -> str:

@@ -31,12 +31,17 @@ curl -fsSL https://claude.ai/install.sh | bash
 ## 사용
 
 ```bash
-python pipeline.py daily            # 전체 실행 (cron 진입점)
-python pipeline.py daily --dry-run  # 저장만, 텔레그램·기록 없이
-python pipeline.py naver            # 인기 검색 종목 (디버그)
-python pipeline.py dart             # 인기종목 공시 매칭 (디버그)
-python pipeline.py telegram test    # 알림 점검
+python pipeline.py daily                 # 전체 실행 (cron 진입점)
+python pipeline.py daily --skip-holiday   # 주말·공휴일이면 실행 안 함 (cron이 쓰는 형태)
+python pipeline.py daily --dry-run        # 저장만, 텔레그램·기록 없이
+python pipeline.py naver                  # 인기 검색 종목 (디버그)
+python pipeline.py dart                   # 인기종목 공시 매칭 (디버그)
+python pipeline.py telegram test          # 알림 점검
 ```
+
+`--skip-holiday` 는 주말·한국 공휴일(설날·추석·대체공휴일 등, `holidays` 라이브러리)
+이면 아무 작업 없이 조용히 종료한다. cron 스크립트가 이 플래그로 부르므로, 증시 휴장일엔
+자동 실행이 걸러진다. 수동 `daily` 실행에는 영향이 없다.
 
 ## 매일 08시 자동 실행 (cron)
 
