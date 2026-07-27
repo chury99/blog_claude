@@ -4,16 +4,31 @@
 > 설계 배경은 [CONTEXT.md](CONTEXT.md), 사용법은 [README.md](README.md).
 > 이 문서는 **무엇이 만들어졌고 무엇이 남았는지**만 담는다.
 
-## 현재 상태 (2026-07-24)
+## 현재 상태 (2026-07-27)
 
-**컨셉이 확정·구현 완료됐다.** 네이버 금융 인기 검색 종목 TOP 20 → 공시 있는 종목
-→ 공시별 3줄 요약(핵심/세부·해석/예상 주가 방향, 방향 판정 포함) → HTML 리포트를
-자체 웹서버 폴더에 저장 → 텔레그램 링크 발송.
+**컨셉이 확정·구현 완료됐고 매일 자동 실행 중이다.** 네이버 금융 인기 검색 종목
+TOP 20 → 공시 있는 종목 → 공시별 3줄 요약(핵심/세부·해석/예상 주가 방향, 방향 판정
+포함) → HTML 리포트를 자체 웹서버 폴더에 저장 → 텔레그램 링크 발송.
 
-- 저장소: https://github.com/chury99/blog_claude (Public, `main`)
-- 서버: Mac Mini. `claude` CLI 설치 완료(`~/.local/bin/claude`).
+- 저장소: https://github.com/chury99/blog_claude (Public, `main`). 최신 커밋 `daccada`.
+- 서버: Mac Mini(이 머신). `claude` CLI 설치 완료(`~/.local/bin/claude`, v2.1.x).
   cron 무인 실행은 `config/claude.json` 의 장기 토큰(`claude setup-token`)으로 인증.
-- 의존성: PyYAML, python-dotenv, requests (Ghost·markdown 경로는 제거됨).
+- 의존성: PyYAML, requests, holidays (Ghost·markdown 경로는 제거됨).
+
+## 최근 변경 이력 (최신순)
+
+- **2026-07-27 — cron claude 인증을 장기 토큰으로 전환** (`daccada`). 배경: 이날 아침
+  08시 cron 이 `Not logged in` 으로 실패. 원인은 키체인 OAuth 토큰이 며칠 만에
+  만료되는데(24일 저녁 만료) 주말 스킵으로 갱신 기회가 없었고, cron 은 GUI 세션이
+  아니라 갱신·키체인 접근이 막힌 것. `claude setup-token` 장기 토큰(1년)을
+  `config/claude.json` 에 두고 `claude_cli.ask` 가 `CLAUDE_CODE_OAUTH_TOKEN` 으로
+  주입하도록 함. 토큰 인식·실제 헤드리스 호출 성공까지 확인 완료.
+  - ⚠️ **미결**: 27일 아침 브리핑은 실패 후 재실행하지 않았다(그날치 리포트 미게재).
+    필요하면 `python pipeline.py daily` 를 수동 실행. seen.json 이 중복을 막으므로
+    이후 정상 실행에 지장은 없음.
+- **2026-07-24 — 주말·공휴일 제외** (`341e2af`). cron 은 `daily --skip-holiday` 로
+  부르고, `common.holiday_reason()`(`holidays.SouthKorea`)이 휴일이면 조용히 종료.
+- **2026-07-24 — 자동실행 launchd → cron 전환** (`91165b7`).
 
 ## 무엇이 동작하는가 (실행으로 확인)
 
