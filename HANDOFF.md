@@ -23,9 +23,8 @@ TOP 20 → 공시 있는 종목 → 공시별 3줄 요약(핵심/세부·해석/
   아니라 갱신·키체인 접근이 막힌 것. `claude setup-token` 장기 토큰(1년)을
   `config/claude.json` 에 두고 `claude_cli.ask` 가 `CLAUDE_CODE_OAUTH_TOKEN` 으로
   주입하도록 함. 토큰 인식·실제 헤드리스 호출 성공까지 확인 완료.
-  - ⚠️ **미결**: 27일 아침 브리핑은 실패 후 재실행하지 않았다(그날치 리포트 미게재).
-    필요하면 `python pipeline.py daily` 를 수동 실행. seen.json 이 중복을 막으므로
-    이후 정상 실행에 지장은 없음.
+  - 27일 아침 브리핑은 cron 실패 후 이날 오후 수동(`python pipeline.py daily`)으로
+    게재 완료(6종목·10건, seen.json 24건). 미결 없음.
 - **2026-07-24 — 주말·공휴일 제외** (`341e2af`). cron 은 `daily --skip-holiday` 로
   부르고, `common.holiday_reason()`(`holidays.SouthKorea`)이 휴일이면 조용히 종료.
 - **2026-07-24 — 자동실행 launchd → cron 전환** (`91165b7`).
