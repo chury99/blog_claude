@@ -11,7 +11,8 @@
 자체 웹서버 폴더에 저장 → 텔레그램 링크 발송.
 
 - 저장소: https://github.com/chury99/blog_claude (Public, `main`)
-- 서버: Mac Mini. `claude` CLI 설치·로그인 완료(`~/.local/bin/claude`).
+- 서버: Mac Mini. `claude` CLI 설치 완료(`~/.local/bin/claude`).
+  cron 무인 실행은 `config/claude.json` 의 장기 토큰(`claude setup-token`)으로 인증.
 - 의존성: PyYAML, python-dotenv, requests (Ghost·markdown 경로는 제거됨).
 
 ## 무엇이 동작하는가 (실행으로 확인)
@@ -34,6 +35,9 @@
 
 ## 주의사항
 
+- **claude 인증**: cron 은 키체인 로그인을 못 빌리고 OAuth 토큰이 며칠 만에 만료된다.
+  `claude setup-token` 으로 발급한 장기 토큰을 `config/claude.json` 의 `oauth_token`
+  에 넣어둔다. 토큰이 만료되면(1년 뒤 등) 재발급 후 이 값만 갈아끼우면 된다.
 - 응답은 항상 한글. 요금제는 **Pro**(Max 아님) — claude 호출 수(공시 건수만큼)에 유의.
 - 비밀값은 `config/*.json` 에만. 에러 메시지에 토큰 싣지 않기.
 - 요약 말끝은 음슴체(했음/뜻임/어려움). `brief._tidy` 가 마침표·어미중복 정리.

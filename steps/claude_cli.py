@@ -6,11 +6,36 @@ API 종량 과금 대신 Max 구독 범위의 CLI 를 쓰기 위한 얇은 레�
 
 from __future__ import annotations
 
+import json
+import os
 import shutil
 import subprocess
 from typing import Any
 
-from .common import PipelineError
+from .common import ROOT, PipelineError
+
+_TOKEN_FILE = "config/claude.json"
+
+
+def _load_oauth_token() -> str | None:
+    """config/claude.json 의 장기 토큰을 읽는다. 없으면 None (키체인 로그인으로 폴백).
+
+    cron 무인 실행은 GUI 세션이 아니라 키체인 접근·토큰 자동 갱신이 막힌다.
+    그래서 OAuth 액세스 토큰이 며칠 만에 만료되면 `Not logged in` 으로 죽는다.
+    `claude setup-token` 으로 발급한 장기 토큰(1년)을 이 파일에 두면 그 문제를
+    피한다. 파일이 없으면 기존처럼 로그인된 CLI 세션(키체인)을 그대로 빌려 쓴다.
+    """
+    path = ROOT / _TOKEN_FILE
+    if not path.exists():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    token = str((data or {}).get("oauth_token", "") or "").strip()
+    if not token or token.startswith("여기에"):
+        return None
+    return token
 
 
 def resolve_bin(cfg: dict[str, Any]) -> str:
@@ -30,6 +55,13 @@ def ask(cfg: dict[str, Any], prompt: str) -> str:
     claude_bin = resolve_bin(cfg)
     timeout = cfg["generate"]["timeout"]
 
+    # 장기 토큰이 있으면 환경변수로 주입한다. cron 은 키체인 로그인을 못 빌리므로
+    # 이게 없으면 토큰 만료 시 Not logged in 으로 죽는다.
+    env = os.environ.copy()
+    token = _load_oauth_token()
+    if token:
+        env["CLAUDE_CODE_OAUTH_TOKEN"] = token
+
     try:
         proc = subprocess.run(
             [claude_bin, "-p", prompt],
@@ -37,6 +69,7 @@ def ask(cfg: dict[str, Any], prompt: str) -> str:
             text=True,
             timeout=timeout,
             check=False,
+            env=env,
         )
     except subprocess.TimeoutExpired as e:
         raise PipelineError(f"claude 호출이 {timeout}초 안에 끝나지 않았습니다.") from e
@@ -47,8 +80,11 @@ def ask(cfg: dict[str, Any], prompt: str) -> str:
         detail = proc.stderr.strip() or proc.stdout.strip() or "(출력 없음)"
         if "login" in detail.lower():
             detail += (
-                "\n  → 터미널에서 `claude` 를 실행하고 /login 으로 로그인하세요.\n"
-                "     (파이프라인은 로그인된 CLI 세션을 그대로 빌려 씁니다)"
+                "\n  → cron 무인 실행은 키체인 로그인을 못 빌리고 토큰이 며칠 만에"
+                " 만료됩니다.\n"
+                "     `claude setup-token` 으로 장기 토큰을 발급해"
+                f" {_TOKEN_FILE} 의 oauth_token 에 넣으세요.\n"
+                "     (대화형 실행은 로그인된 CLI 세션을 그대로 빌려 써도 됩니다)"
             )
         raise PipelineError(f"claude 호출 실패 (exit {proc.returncode}):\n{detail}")
 

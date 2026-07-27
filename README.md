@@ -28,6 +28,18 @@ python pipeline.py telegram setup --token <BotFather토큰>
 curl -fsSL https://claude.ai/install.sh | bash
 ```
 
+**cron 무인 실행엔 장기 토큰이 필요하다.** 대화형 로그인(키체인)은 며칠 만에
+만료되고, cron 은 GUI 세션이 아니라 토큰 자동 갱신을 못 해 `Not logged in` 으로
+죽는다. `claude setup-token` 으로 1년짜리 장기 토큰을 발급해 `config/claude.json`
+(git 제외)에 넣어두면 파이프라인이 이걸 `CLAUDE_CODE_OAUTH_TOKEN` 으로 주입한다.
+
+```bash
+claude setup-token                                # 브라우저 인증 → sk-ant-oat... 출력
+cp config/claude.json.example config/claude.json  # oauth_token 에 붙여넣고 chmod 600
+```
+
+파일이 없으면 기존처럼 로그인된 CLI 세션(키체인)을 빌려 쓴다 — 대화형 개발엔 영향 없음.
+
 ## 사용
 
 ```bash
@@ -100,5 +112,6 @@ logs/                실행 로그 (git 제외; cron 로그는 iCloud python_log
 |---|---|
 | DART 인증키 | `config/dart.json` → `api_key` |
 | 텔레그램 토큰/채팅ID | `config/telegram.json` (`telegram setup` 이 생성) |
+| claude 장기 토큰 | `config/claude.json` → `oauth_token` (`claude setup-token` 이 발급) |
 
 전부 git 제외. `config.yaml` 에는 비밀값을 두지 않는다.

@@ -43,6 +43,11 @@
 - `~/.local/bin/claude` 절대경로 고정 (cron 은 PATH 가 최소한이라). `PATH=/usr/bin:/bin`
   환경에서도 정상 동작 확인됨.
 - 공시별로 1회 호출, {"direction","lines"} JSON 반환. 요약 말끝은 음슴체(했음/뜻임).
+- **인증은 장기 토큰**: 대화형 로그인(키체인 OAuth)은 며칠 만에 만료되고, cron 은
+  GUI 세션이 아니라 토큰 자동 갱신을 못 해 `Not logged in` 으로 죽는다(2026-07 확인).
+  `claude setup-token` 으로 1년짜리 토큰을 발급해 `config/claude.json` 의 `oauth_token`
+  에 두면, `claude_cli.ask` 가 이를 `CLAUDE_CODE_OAUTH_TOKEN` 으로 서브프로세스에
+  주입한다. 파일이 없으면 키체인 로그인으로 폴백(대화형 개발엔 영향 없음).
 
 ### 3-4. 출력·발행
 - Ghost 등 블로그 플랫폼을 쓰지 않는다. **HTML 파일을 자체 웹서버 폴더에 직접 저장**한다.
@@ -96,6 +101,7 @@ python pipeline.py telegram setup|test
 
 - `config/dart.json` (git 제외): DART 인증키 (`api_key`)
 - `config/telegram.json` (git 제외): 텔레그램 토큰/채팅ID
+- `config/claude.json` (git 제외): claude 장기 토큰 (`oauth_token`, `setup-token` 발급)
 - `config.yaml` 에는 비밀값을 두지 않는다. 에러 메시지에 토큰을 싣지 않는다.
 
 ---
