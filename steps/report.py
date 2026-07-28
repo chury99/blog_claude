@@ -27,6 +27,23 @@ h2 { font-size: 17px; margin: 32px 0 12px; padding-bottom: 6px; color: #f3f5f7;
 h2#naver-top { scroll-margin-top: 14px; }
 .lead { background: #1a1f29; border: 1px solid #2a303c; border-radius: 10px;
         padding: 16px 20px; margin-bottom: 8px; font-size: 14px; }
+.idx { display: inline-block; background: #232a36; border: 1px solid #2a303c; border-radius: 8px;
+       padding: 9px 15px; margin: 0 8px 8px 0; min-width: 148px; }
+.idx .in { font-size: 12px; color: #8b93a0; }
+.idx .ip { font-size: 19px; font-weight: 700; color: #f3f5f7; margin: 2px 0 1px; }
+.idx .ic { font-size: 12.5px; font-weight: 600; }
+.idx.up .ic { color: #f87171; }
+.idx.down .ic { color: #7fb0f5; }
+.idx.flat .ic { color: #aab3c0; }
+.mkt { font-size: 14px; color: #cdd4de; margin-top: 4px; }
+.mkt-src { margin-top: 10px; padding-top: 9px; border-top: 1px dashed #2a303c; }
+.mkt-src .t { color: #6b7482; font-size: 11.5px; }
+.mkt-src ul { margin: 4px 0 0; padding-left: 17px; }
+.mkt-src li { color: #97a1af; font-size: 12.5px; margin: 3px 0; }
+.mkt-src li a { color: #97a1af; text-decoration: none; }
+.mkt-src li a:hover { color: #60a5fa; text-decoration: underline; }
+.mkt-src .pr { color: #6b7482; font-size: 11.5px; }
+.asof { display: block; color: #6b7482; font-size: 11.5px; margin-top: 8px; }
 .stock { display: inline-block; background: #232a36; color: #cdd4de; border-radius: 8px;
          padding: 5px 11px; margin: 3px 5px 3px 0; font-size: 13px; }
 .stock .rk { color: #6b7482; font-size: 11px; margin-right: 5px; }
@@ -78,6 +95,54 @@ def _stock_chips(stocks: list[dict[str, Any]], covered_codes: set[str]) -> str:
     return "".join(out)
 
 
+def _market_section(market: dict[str, Any] | None) -> str:
+    """간밤 미국 증시 — 지수 카드 + 흐름 한두 줄. 데이터가 없으면 통째로 뺀다."""
+    if not market or not market.get("indices"):
+        return ""
+    indices = market["indices"]
+    cards = "".join(
+        f'<div class="idx {i["trend"]}">'
+        f'<div class="in">{escape(i["label"])}</div>'
+        f'<div class="ip">{escape(i["close"])}</div>'
+        f'<div class="ic">{escape(i["diff"])} ({i["ratio"]:+.2f}%)</div>'
+        f"</div>"
+        for i in indices
+    )
+    summary = market.get("summary")
+    summary_html = f'<div class="mkt">{escape(summary)}</div>' if summary else ""
+
+    # 요약이 무엇을 보고 쓰였는지 밝힌다 — 독자가 원문으로 확인할 수 있게.
+    sources = market.get("sources") or []
+    src_html = ""
+    if sources:
+        items = "".join(
+            "<li>"
+            + (f'<a href="{escape(s["url"], quote=True)}" target="_blank">{escape(s["title"])}</a>'
+               if s.get("url") else escape(s["title"]))
+            + (f' <span class="pr">{escape(s["press"])}</span>' if s.get("press") else "")
+            + "</li>"
+            for s in sources
+        )
+        src_html = f'<div class="mkt-src"><span class="t">요약 근거 기사</span><ul>{items}</ul></div>'
+
+    traded = next((i["traded_on"] for i in indices if i.get("traded_on")), "")
+    state = "마감" if all(i.get("closed") for i in indices) else "장중"
+    asof = f'<span class="asof">미국 현지 {traded} {state} 기준 · 네이버 금융</span>' if traded else ""
+
+    return (
+        f'<h2>🌏 간밤 미국 증시</h2>\n'
+        f'<div class="lead"><div>{cards}</div>{summary_html}{src_html}{asof}</div>\n'
+    )
+
+
+def _market_note(market: dict[str, Any] | None) -> str:
+    """시황 요약의 근거를 밝히는 고지. 지수 등락 외의 정보는 쓰지 않았다."""
+    if not market or not market.get("summary"):
+        return ""
+    return ("간밤 미국 증시 시황은 위 지수 등락과 함께 표시한 기사만을 근거로 "
+            "정리한 것으로, 기사 원문과 다를 수 있습니다. ")
+
+
 def _disc_card(d: dict[str, Any]) -> str:
     kind, label = _DIR.get(d.get("direction", "중립"), ("neu", "⚪ 중립"))
     lis = "".join(
@@ -96,7 +161,8 @@ def _disc_card(d: dict[str, Any]) -> str:
 
 
 def render(cfg: dict[str, Any], now: datetime,
-           stocks: list[dict[str, Any]], covered: list[dict[str, Any]]) -> str:
+           stocks: list[dict[str, Any]], covered: list[dict[str, Any]],
+           market: dict[str, Any] | None = None) -> str:
     covered_codes = {c["code"] for c in covered}
     chips = _stock_chips(stocks, covered_codes)
     n_disc = sum(len(c["disclosures"]) for c in covered)
@@ -123,6 +189,7 @@ def render(cfg: dict[str, Any], now: datetime,
 <h1>📈 네이버 인기종목 공시 브리핑</h1>
 <div class="sub">{now:%Y년 %m월 %d일 %H:%M} 기준 · 인기종목 TOP {len(stocks)} 중 공시 {len(covered)}종목 · 공시 {n_disc}건</div>
 
+{_market_section(market)}
 <h2 id="naver-top">📈 네이버 인기 검색 종목 TOP {len(stocks)}</h2>
 <div class="lead">
 <b>{now:%Y-%m-%d %H:%M} 조회</b> 기준, 투자자들이 지금 네이버에서 가장 많이 찾아본 종목입니다.
@@ -134,7 +201,7 @@ def render(cfg: dict[str, Any], now: datetime,
 {groups_html}
 
 <div class="foot">
-네이버 금융 인기 검색 종목 중 최근 {cfg['dart']['lookback_days']}일 내 공시가 있는 종목을,
+{_market_note(market)}네이버 금융 인기 검색 종목 중 최근 {cfg['dart']['lookback_days']}일 내 공시가 있는 종목을,
 금융감독원 전자공시(DART) 원문을 근거로 요약했습니다. 단순 절차성 공시(임원 소유상황
 보고 등)는 제외했습니다. 이 글은 투자 권유가 아니며 오류가 있을 수 있으니, 투자 판단
 전 반드시 공시 원문을 확인하세요. 투자 판단과 책임은 본인에게 있습니다.
@@ -143,7 +210,8 @@ def render(cfg: dict[str, Any], now: datetime,
 
 
 def save(cfg: dict[str, Any], now: datetime,
-         stocks: list[dict[str, Any]], covered: list[dict[str, Any]]) -> tuple[Path, str]:
+         stocks: list[dict[str, Any]], covered: list[dict[str, Any]],
+         market: dict[str, Any] | None = None) -> tuple[Path, str]:
     """HTML 을 렌더해 웹 폴더에 저장하고 (파일경로, 웹URL) 을 돌려준다."""
     conf = cfg["report"]
     web_dir = Path(conf["web_dir"])
@@ -154,7 +222,7 @@ def save(cfg: dict[str, Any], now: datetime,
         )
     web_dir.mkdir(parents=True, exist_ok=True)
 
-    html = render(cfg, now, stocks, covered)
+    html = render(cfg, now, stocks, covered, market)
     fname = f"{now:%Y%m%d}_네이버인기종목_공시브리핑.html"
     (web_dir / fname).write_text(html, encoding="utf-8")
     # 한글 원본 URL 그대로 — 인코딩은 클라이언트(텔레그램)에 한 번만 맡긴다

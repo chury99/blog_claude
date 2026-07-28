@@ -7,22 +7,12 @@
 
 from __future__ import annotations
 
-import re
 from typing import Any
 
 from . import claude_cli, dart
-from .common import PipelineError, extract_json, load_prompt
+from .common import PipelineError, extract_json, load_prompt, tidy_line
 
 _VALID_DIR = {"긍정", "부정", "중립"}
-
-
-def _tidy(line: str) -> str:
-    """요약 한 줄 정리. 어미 중복(했다다) 교정 + 음슴체 끝의 마침표 제거."""
-    line = line.strip()
-    line = re.sub(r"다다(?=[\s.,)\]]|$)", "다", line)
-    # 음슴체(…음/함/임)로 끝나는 문장 끝의 마침표는 떼어 통일한다.
-    line = re.sub(r"([음함임])\.$", r"\1", line)
-    return line
 
 
 def summarize(cfg: dict[str, Any], item: dict[str, Any]) -> dict[str, Any]:
@@ -45,7 +35,7 @@ def summarize(cfg: dict[str, Any], item: dict[str, Any]) -> dict[str, Any]:
     return dict(
         item,
         direction=direction,
-        lines=[_tidy(str(l)) for l in lines[: cfg["brief"]["summary_lines"]]],
+        lines=[tidy_line(str(l)) for l in lines[: cfg["brief"]["summary_lines"]]],
     )
 
 

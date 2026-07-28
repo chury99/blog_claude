@@ -3,7 +3,7 @@
 
 매일 08:00 (cron)
   [1.네이버 인기종목 TOP20] → [2.그 종목들의 공시] → [3.3줄요약+방향]
-  → [4.HTML 리포트 서버 저장] → [5.텔레그램 알림]
+  → [4.간밤 미국 증시] → [5.HTML 리포트 서버 저장] → [6.텔레그램 알림]
 
 사용법:
   python pipeline.py daily                 # 전체 실행 (cron 진입점)
@@ -11,6 +11,7 @@
   python pipeline.py daily --dry-run       # 저장만, 텔레그램·기록 없이
   python pipeline.py naver                 # 인기 검색 종목 (디버그)
   python pipeline.py dart                  # 인기종목 공시 매칭 (디버그)
+  python pipeline.py market                # 간밤 미국 증시 시황 (디버그)
   python pipeline.py telegram setup|test
 """
 
@@ -22,7 +23,7 @@ import traceback
 from collections import Counter
 from datetime import datetime
 
-from steps import brief, dart, naver, notify, report
+from steps import brief, dart, market, naver, notify, report
 from steps.common import PipelineError, holiday_reason, load_config
 
 
@@ -62,14 +63,18 @@ def cmd_daily(args, cfg) -> int:
             )
         return 0
 
-    # 4. HTML 리포트 렌더 + 서버 폴더 저장
-    _, url = report.save(cfg, now, stocks, covered)
+    # 4. 간밤 미국 증시 시황 (곁들이는 정보라 실패해도 리포트는 그대로 나간다)
+    #    공시가 있을 때만 부른다 — 스킵하는 날 claude 호출을 낭비하지 않으려고.
+    us = market.brief_us(cfg)
+
+    # 5. HTML 리포트 렌더 + 서버 폴더 저장
+    _, url = report.save(cfg, now, stocks, covered, us)
 
     if dry:
         print(f"[daily] --dry-run 종료. URL: {url}")
         return 0
 
-    # 5. 기록(중복 게재 방지) + 텔레그램 알림
+    # 6. 기록(중복 게재 방지) + 텔레그램 알림
     disclosures = [d for c in covered for d in c["disclosures"]]
     dart.mark_seen(cfg, disclosures)
     dirs = Counter(d.get("direction", "중립") for d in disclosures)
@@ -105,6 +110,17 @@ def cmd_dart(args, cfg) -> int:
     return 0
 
 
+def cmd_market(args, cfg) -> int:
+    us = market.brief_us(cfg)
+    if not us:
+        print("  (미국 지수를 가져오지 못했습니다)")
+        return 0
+    for i in us["indices"]:
+        print(f"  {i['label']:>10}  {i['close']:>12}  {i['diff']:>10} ({i['ratio']:+.2f}%)")
+    print(f"\n  시황: {us['summary'] or '(요약 실패)'}")
+    return 0
+
+
 def cmd_telegram(args, cfg) -> int:
     if args.action == "setup":
         notify.setup(cfg, token=args.token, chat_id=args.chat_id)
@@ -137,6 +153,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_dart = sub.add_parser("dart", help="인기종목 공시 매칭 (디버그)")
     p_dart.set_defaults(func=cmd_dart)
+
+    p_mkt = sub.add_parser("market", help="간밤 미국 증시 시황 (디버그)")
+    p_mkt.set_defaults(func=cmd_market)
 
     p_tg = sub.add_parser("telegram", help="텔레그램 알림 설정/점검")
     p_tg.add_argument(

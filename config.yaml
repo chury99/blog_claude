@@ -21,6 +21,28 @@ dart:
 brief:
   summary_lines: 3
 
+# 리포트 머리말: 간밤 미국 증시 시황
+# 지수·뉴스는 네이버 세계증시 API(인증키 없음), 흐름 요약은 claude 하루 1회 호출.
+# 수집·요약이 실패해도 이 부분만 빠지고 공시 브리핑은 그대로 나간다.
+market:
+  enabled: true
+  us_indices:
+    - { code: ".DJI", label: "다우존스" }
+    - { code: ".IXIC", label: "나스닥" }
+    # 시장 전반까지 보려면 주석을 푼다 (claude 요약 입력에도 함께 들어간다)
+    # - { code: ".INX", label: "S&P 500" }
+  # 요약의 근거가 되는 기사(네이버 금융 > 뉴스 > 해외증시).
+  # 기사가 없으면 원인을 못 쓰므로 요약을 건너뛴다.
+  news:
+    enabled: true
+    pages: 3            # 목록 몇 쪽까지 볼지 (간밤 마감 기사는 뒤쪽으로 밀린다)
+    max_items: 6        # claude 에 넘길 기사 수 (미국 시장 전체 기사 우선)
+    within_hours: 72    # 이 시간 안의 기사만 (월요일엔 금요일 마감까지 봐야 함)
+    show_in_report: 3   # 리포트에 근거로 표시할 기사 수 (0이면 숨김)
+    # 목록 발췌는 100자 남짓이라 상세한 요약을 쓸 수 없다. 상위 기사만 본문까지 받는다.
+    body_count: 3
+    body_max_chars: 1500
+
 # claude CLI (헤드리스 -p 호출)
 generate:
   # launchd/cron 은 PATH 가 최소한이라 절대경로로 둔다.

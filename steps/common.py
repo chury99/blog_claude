@@ -43,6 +43,18 @@ def holiday_reason(day: date | None = None) -> str | None:
     return None
 
 
+def tidy_line(line: str) -> str:
+    """생성된 한 줄 정리. 어미 중복(했다다) 교정 + 음슴체 끝의 마침표 제거.
+
+    공시 3줄 요약과 미국 시황이 같은 말끝 규칙(음슴체)을 쓰므로 여기 둔다.
+    """
+    line = line.strip()
+    line = re.sub(r"다다(?=[\s.,)\]]|$)", "다", line)
+    # 음슴체(…음/함/임)로 끝나는 문장 끝의 마침표는 떼어 통일한다.
+    line = re.sub(r"([음함임])\.$", r"\1", line)
+    return line
+
+
 def load_secret_file(rel_path: str, key: str, *, how_to: str) -> str:
     """config/ 아래 JSON 파일에서 비밀값 하나를 읽는다 (텔레그램과 같은 방식).
 
