@@ -6,12 +6,12 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from datetime import datetime
 from html import escape
 from pathlib import Path
 from typing import Any
 
-from . import dart
 from .common import PipelineError
 
 _CSS = """
@@ -24,7 +24,7 @@ h1 { font-size: 23px; margin: 0 0 6px; color: #f3f5f7; }
 .sub { color: #97a1af; font-size: 13px; margin-bottom: 24px; }
 h2 { font-size: 17px; margin: 32px 0 12px; padding-bottom: 6px; color: #f3f5f7;
      border-bottom: 2px solid #3b82f6; }
-h2#naver-top { scroll-margin-top: 14px; }
+h2#stock-top { scroll-margin-top: 14px; }
 .lead { background: #1a1f29; border: 1px solid #2a303c; border-radius: 10px;
         padding: 16px 20px; margin-bottom: 8px; font-size: 14px; }
 .idx { display: inline-block; background: #232a36; border: 1px solid #2a303c; border-radius: 8px;
@@ -46,7 +46,10 @@ h2#naver-top { scroll-margin-top: 14px; }
 .asof { display: block; color: #6b7482; font-size: 11.5px; margin-top: 8px; }
 .stock { display: inline-block; background: #232a36; color: #cdd4de; border-radius: 8px;
          padding: 5px 11px; margin: 3px 5px 3px 0; font-size: 13px; }
-.stock .rk { color: #6b7482; font-size: 11px; margin-right: 5px; }
+.stock .rk { font-size: 11.5px; margin-left: 6px; font-weight: 700; }
+.stock .rk.up { color: #f87171; }
+.stock .rk.down { color: #7fb0f5; }
+.stock .rk.flat { color: #8b93a0; }
 .stock.has { background: #2a2113; color: #fbbf24; border: 1px solid #f59e0b; font-weight: 600; }
 a.stock.has { text-decoration: none; cursor: pointer; }
 a.stock.has:hover { background: #3a2c15; border-color: #fbbf24; }
@@ -60,8 +63,13 @@ a.gback:hover { color: #6ee7b7; }
 .card.pos { border-left: 4px solid #ef4444; }
 .card.neg { border-left: 4px solid #3b82f6; }
 .card.neu { border-left: 4px solid #6b7482; }
-.card .rn { font-size: 14px; font-weight: 600; color: #f3f5f7; margin-bottom: 4px; }
-.card .dt { font-size: 12px; color: #8b93a0; margin-bottom: 8px; }
+.card .rn { font-size: 15px; font-weight: 700; color: #f3f5f7; margin-bottom: 9px; }
+.card .rn .cd { color: #6b7482; font-size: 11.5px; font-weight: 500; margin-left: 6px; }
+.px { float: right; font-size: 13px; font-weight: 600; color: #cdd4de; }
+.px .pc { margin-left: 7px; }
+.px .pc.up { color: #f87171; }
+.px .pc.down { color: #7fb0f5; }
+.px .pc.flat { color: #aab3c0; }
 .dir { font-size: 12px; font-weight: 700; border-radius: 6px; padding: 1px 8px; margin-right: 8px; }
 .dir.pos { background: #3a1518; color: #f87171; }
 .dir.neg { background: #14243c; color: #7fb0f5; }
@@ -69,29 +77,31 @@ a.gback:hover { color: #6ee7b7; }
 ol.sum { margin: 0; padding-left: 20px; }
 ol.sum li { margin: 5px 0; }
 ol.sum li .lb { color: #8b93a0; font-size: 11.5px; margin-right: 4px; }
-.src { display: inline-block; margin-top: 9px; font-size: 12.5px; }
-.src a { color: #60a5fa; text-decoration: none; }
 .foot { color: #6b7482; font-size: 12px; margin-top: 30px; padding-top: 14px;
         border-top: 1px solid #2a303c; }
 """
 
-_LABELS = ["핵심", "세부·해석", "예상 주가 방향"]
+_LABELS = ["무슨 일", "세부·해석", "예상 주가 방향"]
 _DIR = {"긍정": ("pos", "🔺 긍정"), "부정": ("neg", "🔻 부정"), "중립": ("neu", "⚪ 중립")}
 
 
-def _fmt_date(dt: str) -> str:
-    return f"{dt[:4]}-{dt[4:6]}-{dt[6:8]}" if len(dt) == 8 else dt
+def _move(stock: dict[str, Any]) -> str:
+    """현재가 + 등락률. 국내 관행대로 상승 빨강 / 하락 파랑."""
+    ratio = stock.get("ratio")
+    if not isinstance(ratio, (int, float)):
+        return f'<span class="px">{escape(stock.get("price") or "")}</span>'
+    return (f'<span class="px">{escape(stock.get("price") or "")}'
+            f'<span class="pc {stock.get("trend", "flat")}">{ratio:+.2f}%</span></span>')
 
 
-def _stock_chips(stocks: list[dict[str, Any]], covered_codes: set[str]) -> str:
+def _stock_chips(stocks: list[dict[str, Any]]) -> str:
+    """특징주 한 줄 훑기 — 종목명 + 등락률. 누르면 아래 이슈 요약으로 간다."""
     out = []
     for s in stocks:
-        inner = f'<span class="rk">{s["rank"]}</span>{escape(s["name"])}'
-        if s["code"] in covered_codes:
-            # 공시 있는 종목은 아래 해당 공시로 바로 이동
-            out.append(f'<a class="stock has" href="#s{s["code"]}">{inner} 📄</a>')
-        else:
-            out.append(f'<span class="stock">{inner}</span>')
+        ratio = s.get("ratio")
+        move = (f'<span class="rk {s.get("trend", "flat")}">{ratio:+.2f}%</span>'
+                if isinstance(ratio, (int, float)) else "")
+        out.append(f'<a class="stock has" href="#s{s["code"]}">{escape(s["name"])}{move}</a>')
     return "".join(out)
 
 
@@ -111,20 +121,7 @@ def _market_section(market: dict[str, Any] | None) -> str:
     summary = market.get("summary")
     summary_html = f'<div class="mkt">{escape(summary)}</div>' if summary else ""
 
-    # 요약이 무엇을 보고 쓰였는지 밝힌다 — 독자가 원문으로 확인할 수 있게.
-    sources = market.get("sources") or []
-    src_html = ""
-    if sources:
-        items = "".join(
-            "<li>"
-            + (f'<a href="{escape(s["url"], quote=True)}" target="_blank">{escape(s["title"])}</a>'
-               if s.get("url") else escape(s["title"]))
-            + (f' <span class="pr">{escape(s["press"])}</span>' if s.get("press") else "")
-            + "</li>"
-            for s in sources
-        )
-        src_html = f'<div class="mkt-src"><span class="t">요약 근거 기사</span><ul>{items}</ul></div>'
-
+    src_html = _sources(market.get("sources") or [], "요약 근거 기사")
     traded = next((i["traded_on"] for i in indices if i.get("traded_on")), "")
     state = "마감" if all(i.get("closed") for i in indices) else "장중"
     asof = f'<span class="asof">미국 현지 {traded} {state} 기준 · 네이버 금융</span>' if traded else ""
@@ -143,75 +140,92 @@ def _market_note(market: dict[str, Any] | None) -> str:
             "정리한 것으로, 기사 원문과 다를 수 있습니다. ")
 
 
-def _disc_card(d: dict[str, Any]) -> str:
-    kind, label = _DIR.get(d.get("direction", "중립"), ("neu", "⚪ 중립"))
+def _sources(items: list[dict[str, Any]], label: str) -> str:
+    """요약이 무엇을 보고 쓰였는지 — 제목을 누르면 기사 원문으로 간다."""
+    if not items:
+        return ""
+    lis = "".join(
+        "<li>"
+        + (f'<a href="{escape(s["url"], quote=True)}" target="_blank">{escape(s["title"])}</a>'
+           if s.get("url") else escape(s["title"]))
+        + (f' <span class="pr">{escape(s["press"])}</span>' if s.get("press") else "")
+        + "</li>"
+        for s in items
+    )
+    return f'<div class="mkt-src"><span class="t">{label}</span><ul>{lis}</ul></div>'
+
+
+def _highlight_card(s: dict[str, Any]) -> str:
+    """특징주 하나 — 방향 배지 + 이슈 3줄 + 근거 기사."""
+    kind, label = _DIR.get(s.get("direction", "중립"), ("neu", "⚪ 중립"))
     lis = "".join(
         f'<li><span class="lb">{_LABELS[j] if j < len(_LABELS) else ""}</span>{escape(l)}</li>'
-        for j, l in enumerate(d["lines"])
+        for j, l in enumerate(s["lines"])
     )
-    url = dart.viewer_url(d["rcept_no"])
     return (
         f'<div class="card {kind}">'
-        f'<div class="rn"><span class="dir {kind}">{label}</span>{escape(d["report_nm"])}</div>'
-        f'<div class="dt">📅 공시일 {_fmt_date(d.get("rcept_dt", ""))}</div>'
+        f'<div class="rn"><span class="dir {kind}">{label}</span>{escape(s["name"])}'
+        f'<span class="cd">{escape(s["code"])}</span>{_move(s)}</div>'
         f'<ol class="sum">{lis}</ol>'
-        f'<div class="src">📄 <a href="{url}" target="_blank">공시 원문 보기</a></div>'
+        f'{_sources(s.get("sources") or [], "특징주 기사")}'
         f"</div>"
     )
 
 
 def render(cfg: dict[str, Any], now: datetime,
-           stocks: list[dict[str, Any]], covered: list[dict[str, Any]],
+           stocks: list[dict[str, Any]],
            market: dict[str, Any] | None = None) -> str:
-    covered_codes = {c["code"] for c in covered}
-    chips = _stock_chips(stocks, covered_codes)
-    n_disc = sum(len(c["disclosures"]) for c in covered)
+    chips = _stock_chips(stocks)
+    dirs = Counter(s.get("direction", "중립") for s in stocks)
+    n_art = sum(len(s.get("articles") or []) for s in stocks)
 
     groups = []
-    for c in covered:
-        cards = "\n".join(_disc_card(d) for d in c["disclosures"])
-        # 종목명을 누르면 맨 위 인기검색 종목 목록으로 되돌아간다
+    for s in stocks:
+        # 종목명을 누르면 맨 위 특징주 목록으로 되돌아간다
         groups.append(
-            f'<div class="grp" id="s{c["code"]}"><div class="gh"><span class="grk">'
-            f'{c["rank"]}위</span>'
-            f'<a class="gback" href="#naver-top">{escape(c["name"])} ↑</a></div>{cards}</div>'
+            f'<div class="grp" id="s{s["code"]}"><div class="gh">'
+            f'<a class="gback" href="#stock-top">{escape(s["name"])} ↑</a></div>'
+            f'{_highlight_card(s)}</div>'
         )
     groups_html = "\n".join(groups) if groups else (
-        '<div class="lead">인기 검색 종목 중 최근 공시가 있는 종목이 없습니다.</div>'
+        '<div class="lead">오늘 다룰 만한 특징주 기사가 없습니다.</div>'
     )
 
     return f"""<!doctype html>
 <html lang="ko"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>네이버 인기종목 공시 브리핑 ({now:%Y-%m-%d})</title>
+<title>오늘의 특징주 브리핑 ({now:%Y-%m-%d})</title>
 <style>{_CSS}</style></head>
 <body><div class="wrap">
-<h1>📈 네이버 인기종목 공시 브리핑</h1>
-<div class="sub">{now:%Y년 %m월 %d일 %H:%M} 기준 · 인기종목 TOP {len(stocks)} 중 공시 {len(covered)}종목 · 공시 {n_disc}건</div>
+<h1>📈 오늘의 특징주 브리핑</h1>
+<div class="sub">{now:%Y년 %m월 %d일 %H:%M} 기준 · 특징주 {len(stocks)}종목 · 기사 {n_art}건 · 긍정 {dirs['긍정']} · 부정 {dirs['부정']} · 중립 {dirs['중립']}</div>
 
 {_market_section(market)}
-<h2 id="naver-top">📈 네이버 인기 검색 종목 TOP {len(stocks)}</h2>
+<h2 id="stock-top">📊 오늘의 특징주</h2>
 <div class="lead">
-<b>{now:%Y-%m-%d %H:%M} 조회</b> 기준, 투자자들이 지금 네이버에서 가장 많이 찾아본 종목입니다.
-<b>📄</b> 표시가 최근 공시가 있어 아래에서 정리한 <b>{len(covered)}개</b> 종목입니다.
+<b>{now:%Y-%m-%d %H:%M} 조회</b> 기준, 오늘 언론이 <b>특징주</b> 기사로 다룬 종목입니다.
+종목을 누르면 아래 이슈 요약으로 이동합니다.
 <div style="margin-top:10px">{chips}</div>
 </div>
 
-<h2>📄 인기종목 공시 정리</h2>
+<h2>🔥 종목별 이슈</h2>
 {groups_html}
 
 <div class="foot">
-{_market_note(market)}네이버 금융 인기 검색 종목 중 최근 {cfg['dart']['lookback_days']}일 내 공시가 있는 종목을,
-금융감독원 전자공시(DART) 원문을 근거로 요약했습니다. 단순 절차성 공시(임원 소유상황
-보고 등)는 제외했습니다. 이 글은 투자 권유가 아니며 오류가 있을 수 있으니, 투자 판단
-전 반드시 공시 원문을 확인하세요. 투자 판단과 책임은 본인에게 있습니다.
+{_market_note(market)}직전 거래일 장 종료({cfg['market_close']}) 이후 나온 기사 중
+종목별로 묶은 것을, 함께 표시한 기사만을 근거로 요약했습니다. 제목에 '특징주'가 들어간
+기사를 우선하고 모자라면 등락률 상위 종목의 기사로 채웁니다. 종목은 기사 제목에서
+찾아 종목코드로 확인한 것이며, 현재가·등락률은 조회 시점 기준이라 지금과 다를 수 있습니다.
+긍정·부정 표시는 기사 내용에 따른 기계적 판정이며 기사 원문과 다를 수 있으니, 투자 판단
+전 반드시 기사 원문을 확인하세요. 이 글은 투자 권유가 아니고 오류가 있을 수 있습니다.
+투자 판단과 책임은 본인에게 있습니다.
 </div>
 </div></body></html>"""
 
 
 def save(cfg: dict[str, Any], now: datetime,
-         stocks: list[dict[str, Any]], covered: list[dict[str, Any]],
-         market: dict[str, Any] | None = None) -> tuple[Path, str]:
+         stocks: list[dict[str, Any]],
+         market: dict[str, Any] | None = None, *, fname: str | None = None) -> tuple[Path, str]:
     """HTML 을 렌더해 웹 폴더에 저장하고 (파일경로, 웹URL) 을 돌려준다."""
     conf = cfg["report"]
     web_dir = Path(conf["web_dir"])
@@ -222,8 +236,8 @@ def save(cfg: dict[str, Any], now: datetime,
         )
     web_dir.mkdir(parents=True, exist_ok=True)
 
-    html = render(cfg, now, stocks, covered, market)
-    fname = f"{now:%Y%m%d}_네이버인기종목_공시브리핑.html"
+    html = render(cfg, now, stocks, market)
+    fname = fname or f"{now:%Y%m%d}_오늘의특징주_브리핑.html"
     (web_dir / fname).write_text(html, encoding="utf-8")
     # 한글 원본 URL 그대로 — 인코딩은 클라이언트(텔레그램)에 한 번만 맡긴다
     url = f"{conf['url_base'].rstrip('/')}/{fname}"

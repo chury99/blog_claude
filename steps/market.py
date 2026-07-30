@@ -22,7 +22,7 @@ from urllib.parse import quote
 import requests
 
 from . import claude_cli
-from .common import extract_json, load_prompt, tidy_line
+from .common import extract_json, last_close, load_prompt, tidy_line
 
 _INDEX_API = "https://api.stock.naver.com/index/{code}/basic"
 # 네이버 금융 > 뉴스 > 해외증시. 여기 기사는 일반 네이버 뉴스라 링크가 열린다
@@ -175,7 +175,9 @@ def fetch_us_news(cfg: dict[str, Any]) -> list[dict[str, Any]]:
         return []
 
     max_items = int(conf.get("max_items", 6))
-    cutoff = datetime.now() - timedelta(hours=float(conf.get("within_hours", 72)))
+    # 국내 기사와 같은 구간(직전 거래일 장 종료 이후)을 쓴다. 미국 마감 시황은
+    # 새벽 5~7시에 올라오므로 이 구간에 들어온다.
+    cutoff = last_close(cfg)
 
     by_url: dict[str, dict[str, Any]] = {}
     for page in range(1, int(conf.get("pages", 3)) + 1):

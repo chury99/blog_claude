@@ -6,7 +6,7 @@ import hashlib
 import json
 import re
 import unicodedata
-from datetime import date
+from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -24,7 +24,7 @@ class PipelineError(Exception):
 def holiday_reason(day: date | None = None) -> str | None:
     """휴일이면 사유(주말/공휴일명), 영업일이면 None.
 
-    한국 증시가 쉬는 날(주말·공휴일)에는 새 공시가 없으므로, 08시 자동 실행을
+    한국 증시가 쉬는 날(주말·공휴일)에는 새 기사가 없으므로, 07시 자동 실행을
     이 값으로 건너뛴다. 공휴일 판정은 holidays 라이브러리(SouthKorea)를 쓰되,
     없으면 주말만이라도 거른다.
     """
@@ -41,6 +41,25 @@ def holiday_reason(day: date | None = None) -> str | None:
     if day.weekday() >= 5:  # 토(5)·일(6)
         return f"주말({_WEEKDAY_KR[day.weekday()]})"
     return None
+
+
+def last_close(cfg: dict[str, Any], now: datetime | None = None) -> datetime:
+    """직전 거래일의 장 종료 시각 — 기사 수집 구간의 시작점.
+
+    아침 리포트는 **전일 장 종료 이후에 나온 기사**만 다뤄야 한다. 그래야 장중에
+    이미 주가에 반영되고 소화된 소식을 다음 날 아침에 다시 싣지 않는다.
+
+    월요일 아침이면 금요일 장 종료가 시작점이 된다(주말·공휴일은 건너뛴다).
+    장 마감 뒤에 수동 실행하면 그날 장 종료가 시작점이 된다.
+    """
+    now = now or datetime.now()
+    hour, minute = (int(x) for x in str(cfg.get("market_close", "15:30")).split(":"))
+    day = now.date()
+    if now <= datetime.combine(day, time(hour, minute)):
+        day -= timedelta(days=1)  # 아직 오늘 장이 안 끝났으면 전 거래일 기준
+    while holiday_reason(day):
+        day -= timedelta(days=1)
+    return datetime.combine(day, time(hour, minute))
 
 
 def tidy_line(line: str) -> str:

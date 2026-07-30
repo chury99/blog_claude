@@ -1,12 +1,53 @@
-# 네이버 인기검색종목 기반 공시 브리핑 설정
+# 오늘의 특징주 브리핑 설정
 # 비밀값(API 키)은 여기 두지 말 것. .env / config/*.json 사용.
 
-# 1단계: 네이버 금융 인기 검색 종목 (투자자 관심 종목)
+# 기사 수집 구간의 시작점 = 직전 거래일의 이 시각(장 종료). 끝은 실행 시각.
+# 아침 07시 리포트가 장중에 이미 소화된 소식을 다시 싣지 않게 하려는 것.
+# 월요일 아침이면 금요일 장 종료부터가 된다(주말·공휴일은 건너뜀).
+market_close: "15:30"
+
+# 1단계: 오늘의 특징주 — 제목에 '특징주'가 들어간 기사를 종목별로 묶는다.
+# 종목당 claude 1회 호출이므로 top_n 이 곧 호출 수다.
+highlight:
+  enabled: true
+  query: "특징주"
+  top_n: 6             # 이슈를 정리할 종목 수
+  naver_news: 3        # 종목당 본문 근거로 덧붙일 네이버 기사 수
+  show_in_report: 4    # 종목당 리포트에 표시할 기사 수
+  summary_lines: 3
+  # 대괄호 안에 이 말이 들어가면 해외 특징주라 뺀다 ([유럽 특징주] 등)
+  exclude_keywords: ["美", "미국", "뉴욕", "나스닥", "유럽", "일본", "중국", "홍콩", "해외"]
+  # 특징주 기사는 장중에만 나온다. 07시처럼 장 마감 뒤 구간만 보면 거의 안 잡히므로
+  # 모자란 만큼 등락률 상위 종목의 기사로 채운다(제목에 종목명이 든 기사만).
+  movers:
+    enabled: true
+    rise_n: 40         # 상승률 상위 몇 종목까지 볼지
+    fall_n: 40         # 하락률 상위 몇 종목까지 볼지
+    news_per_stock: 10 # 종목당 훑어볼 기사 수 (이 중 제목에 종목명이 든 것만 씀)
+
+# 주식 테마 — 현재 daily 파이프라인에서는 쓰지 않는다 (`pipeline.py theme` 로 확인).
+theme:
+  enabled: true
+  list_pages: 1        # 테마 목록 쪽수 (1쪽 = 40개, 등락률 상위부터)
+  top_n: 5             # 이슈를 정리할 테마 수
+  max_scan: 15         # 기사 찾느라 들여다볼 테마 수 상한 (조용한 날 요청 폭증 방지)
+  stocks_per_theme: 8  # 테마에서 기사를 모을 종목 수 (등락률 상위)
+  show_themes: 20      # 리포트 상단 목록에 보여줄 테마 수
+  show_stocks: 5       # 리포트에 관련 종목으로 표시할 수
+  news_per_stock: 3    # 종목당 기사 수
+  max_news: 8          # 테마당 claude 에 넘길 기사 수
+  show_in_report: 3    # 테마당 리포트에 표시할 근거 기사 수
+  summary_lines: 3
+  # 상장 형태에 따른 묶음이라 공통 재료가 없는 것들 — claude 부르기 전에 거른다
+  exclude_keywords: ["신규상장", "기업인수목적회사", "SPAC", "지주사"]
+
+# 네이버 금융 인기 검색 종목 — 현재 daily 파이프라인에서는 쓰지 않는다.
+# `pipeline.py naver` / `feature` 디버그용으로 남겨둔다.
 naver:
   enabled: true
-  top_n: 20   # 상위 N개 종목을 보고 그중 공시 있는 종목을 다룬다
+  top_n: 20
 
-# 2단계: DART 공시 (인증키는 config/dart.json)
+# DART 공시 — 현재 daily 파이프라인에서는 쓰지 않는다 (인증키는 config/dart.json).
 dart:
   # 오늘부터 며칠 전까지의 공시를 볼지 (주말·휴일 대비 여유)
   lookback_days: 3
@@ -17,13 +58,22 @@ dart:
   # 3줄 요약에 넣을 공시 본문 최대 글자 수
   doc_max_chars: 6000
 
-# 3단계: 요약
+# 인기종목 뉴스 요약 — 현재 daily 파이프라인에서는 쓰지 않는다.
+feature:
+  enabled: true
+  top_n: 6            # 기사가 있는 인기종목 상위 몇 개를 다룰지
+  max_news: 5         # 종목당 claude 에 넘길 기사 수
+  show_in_report: 3   # 종목당 리포트에 표시할 근거 기사 수
+  summary_lines: 3
+
+# 공시(DART) 기반 요약 — 현재 daily 파이프라인에서는 쓰지 않는다.
+# `pipeline.py dart` 디버그용으로 남겨둔다.
 brief:
   summary_lines: 3
 
 # 리포트 머리말: 간밤 미국 증시 시황
 # 지수·뉴스는 네이버 세계증시 API(인증키 없음), 흐름 요약은 claude 하루 1회 호출.
-# 수집·요약이 실패해도 이 부분만 빠지고 공시 브리핑은 그대로 나간다.
+# 수집·요약이 실패해도 이 부분만 빠지고 특징주 브리핑은 그대로 나간다.
 market:
   enabled: true
   us_indices:
@@ -37,7 +87,6 @@ market:
     enabled: true
     pages: 3            # 목록 몇 쪽까지 볼지 (간밤 마감 기사는 뒤쪽으로 밀린다)
     max_items: 6        # claude 에 넘길 기사 수 (미국 시장 전체 기사 우선)
-    within_hours: 72    # 이 시간 안의 기사만 (월요일엔 금요일 마감까지 봐야 함)
     show_in_report: 3   # 리포트에 근거로 표시할 기사 수 (0이면 숨김)
     # 목록 발췌는 100자 남짓이라 상세한 요약을 쓸 수 없다. 상위 기사만 본문까지 받는다.
     body_count: 3
@@ -49,14 +98,14 @@ generate:
   claude_bin: "/Users/chury99/.local/bin/claude"
   timeout: 300
 
-# 4단계: HTML 리포트 출력 (자체 웹서버로 서빙되는 폴더에 저장)
+# 2단계: HTML 리포트 출력 (자체 웹서버로 서빙되는 폴더에 저장)
 report:
   # HTML 을 저장할 로컬 폴더 (웹서버가 이 폴더를 서빙)
   web_dir: "/Volumes/extSSD4tb/90_web/kakao/클로드수행결과"
   # 위 폴더가 열리는 웹 주소 (파일명이 뒤에 붙는다)
   url_base: "http://goniee.iptime.org/kakao/클로드수행결과"
 
-# 5단계: 텔레그램 알림 (자격증명은 config/telegram.json)
+# 3단계: 텔레그램 알림 (자격증명은 config/telegram.json)
 notify:
   telegram:
     enabled: true
