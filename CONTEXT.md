@@ -107,7 +107,7 @@
 ### 3-3. 글 생성은 `claude -p` (헤드리스)
 - `~/.local/bin/claude` 절대경로 고정 (cron 은 PATH 가 최소한이라). `PATH=/usr/bin:/bin`
   환경에서도 정상 동작 확인됨.
-- 공시별로 1회 호출, {"direction","lines"} JSON 반환. 요약 말끝은 음슴체(했음/뜻임).
+- 공시별로 1회 호출, {"direction","lines"} JSON 반환. 요약 말끝은 음슴체(했음/늘었음).
 - **프로젝트 밖 빈 폴더에서 실행한다**(`claude_cli._neutral_cwd`). 프로젝트 폴더에서
   부르면 claude 가 저장소(CLAUDE.md·소스·git 상태)를 컨텍스트로 끌어와, 요약 대신
   "저장소가 이런 상태다" 같은 엉뚱한 응답을 낼 때가 있다(2026-07 실측). 요약에
