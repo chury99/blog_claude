@@ -145,7 +145,8 @@
   `cron/blog_claude.sh` 를 `/Users/sh/blog_claude.sh` 로 배포하고 crontab 에
   `0 7 * * * /Users/sh/blog_claude.sh` 를 추가한다. 로그는 iCloud
   `python_log/blog_claude_YYYYMMDD.log`.
-- cron 은 잠든 Mac 을 못 깨운다. 확실히 하려면 `pmset repeat wakeorpoweron MTWRFSU 06:55:00`.
+- cron 은 잠든 Mac 을 못 깨우지만, 이 서버는 **절전에 들어가지 않게 설정돼 있어**
+  기상 예약(`pmset repeat wakeorpoweron`)이 필요 없다.
 - **휴일 제외**: cron 스크립트는 `daily --skip-holiday` 로 부른다. 주말·한국 공휴일
   (`holidays.SouthKorea`, 대체공휴일 포함)이면 네이버·DART·claude 호출 없이 조용히
   종료한다. 판정은 `common.holiday_reason()`. 증시 휴장일엔 새 공시가 없기 때문.

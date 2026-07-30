@@ -81,11 +81,9 @@ crontab 에 아래 한 줄 추가 (`crontab -e`, 기존 항목은 유지):
 
 로그는 iCloud `python_log/blog_claude_YYYYMMDD.log` 에 날짜별로 쌓인다.
 
-cron 은 잠든 Mac 을 깨우지 못한다. 07시에 확실히 실행하려면 미리 깨워둔다:
-
-```bash
-sudo pmset repeat wakeorpoweron MTWRFSU 06:55:00
-```
+cron 은 잠든 Mac 을 깨우지 못한다. 이 서버는 절전에 들어가지 않게 설정해 뒀으므로
+기상 예약은 두지 않는다. 절전을 쓰는 환경이라면 `pmset repeat wakeorpoweron` 으로
+실행 시각 직전에 깨워야 한다.
 
 ## 출력
 
